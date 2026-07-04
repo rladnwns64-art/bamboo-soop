@@ -785,7 +785,32 @@ let S={me:null,view:'home',subview:'feed',forest:null,channel:null,target:null,q
 
 function bid(){let id=localStorage.getItem('bid');if(!id){id='g_'+Math.random().toString(36).slice(2,9);localStorage.setItem('bid',id)}return id}
 const BID=bid();const whoAmI=()=>S.me||BID;
-function loadSes(){try{S.me=localStorage.getItem('me')||null;S.forest=localStorage.getItem('forest')||null;S.theme=localStorage.getItem('theme')||'light';applyTheme()}catch(e){}}
+async function loadSes(){
+  try{
+    S.forest=localStorage.getItem('forest')||null;
+    S.theme=localStorage.getItem('theme')||'light';
+    applyTheme();
+    // Supabase Auth 세션 확인
+    const {data:{session}}=await sb.auth.getSession();
+    if(session){
+      // 세션 있으면 닉네임 가져오기
+      const {data:prof}=await sb.from('profiles').select('nick').eq('user_id',session.user.id).maybeSingle();
+      if(prof){S.me=prof.nick;localStorage.setItem('me',prof.nick);}
+      else{S.me=null;}
+    }else{
+      S.me=null;localStorage.removeItem('me');
+    }
+  }catch(e){S.me=null;}
+}
+
+// Auth 상태 변경 감지 (다른 탭 로그아웃 등)
+sb.auth.onAuthStateChange(async(event,session)=>{
+  if(event==='SIGNED_OUT'){S.me=null;localStorage.removeItem('me');render();}
+  else if(event==='SIGNED_IN'&&session){
+    const {data:prof}=await sb.from('profiles').select('nick').eq('user_id',session.user.id).maybeSingle();
+    if(prof&&prof.nick!==S.me){S.me=prof.nick;localStorage.setItem('me',prof.nick);await loadAll();}
+  }
+});
 function saveSes(){try{S.me?localStorage.setItem('me',S.me):localStorage.removeItem('me');S.forest?localStorage.setItem('forest',S.forest):localStorage.removeItem('forest');localStorage.setItem('theme',S.theme)}catch(e){}}
 function applyTheme(){document.documentElement.setAttribute('data-theme',S.theme)}
 function toggleTheme(){S.theme=S.theme==='dark'?'light':'dark';applyTheme();saveSes();render()}
@@ -1779,6 +1804,514 @@ async function saveEdit(id){const title=document.getElementById('e-title')?.valu
 // 선택 툴바
 function hideToolbar(){document.getElementById('sel-toolbar')?.classList.remove('show')}
 
+// ═══ 로그인 / 가입 / 인증 ═══
+// 초대코드는 DB(invite_codes 테이블)에서 검증 — 하드코딩 없음
+
+function openAuth(){
+  modal(`
+  <div class="modal-head"><h2>🎋 합성초 대나무숲</h2><button class="modal-x" onclick="closeM()">${ic('x','sm')}</button></div>
+  <div class="modal-body">
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:44px;margin-bottom:6px">🎋</div>
+      <div style="font-size:14px;color:var(--text3)">6학년 학생만 이용할 수 있어요</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:20px">
+      <button id="tab-login" class="btn btn-primary" style="flex:1" onclick="authTab('login')">로그인</button>
+      <button id="tab-signup" class="btn btn-secondary" style="flex:1" onclick="authTab('signup')">회원가입</button>
+    </div>
+    <div id="auth-form"></div>
+  </div>`);
+  authTab('login');
+}
+
+function authTab(tab){
+  document.getElementById('tab-login').className='btn '+(tab==='login'?'btn-primary':'btn-secondary');
+  document.getElementById('tab-signup').className='btn '+(tab==='signup'?'btn-primary':'btn-secondary');
+  const form=document.getElementById('auth-form');if(!form)return;
+  if(tab==='login'){
+    form.innerHTML=`
+      <div class="mfield"><label>닉네임</label><input class="inp" id="auth-nick" placeholder="가입할 때 만든 닉네임" maxlength="12" onkeydown="if(event.key==='Enter')doAuth('login')"></div>
+      <div class="mfield"><label>비밀번호</label><input class="inp" type="password" id="auth-pw" placeholder="비밀번호" onkeydown="if(event.key==='Enter')doAuth('login')"></div>
+      <button class="btn btn-primary btn-block" onclick="doAuth('login')">로그인</button>`;
+  }else{
+    form.innerHTML=`
+      <div class="mfield">
+        <label>초대 코드 🔐</label>
+        <input class="inp" id="auth-code" placeholder="선생님께 받은 코드" maxlength="20" style="letter-spacing:2px;font-weight:700;text-transform:uppercase">
+      </div>
+      <div style="display:flex;gap:8px">
+        <div class="mfield" style="flex:1"><label>반</label><input class="inp" id="auth-class" type="number" placeholder="1" min="1" max="6"></div>
+        <div class="mfield" style="flex:1"><label>번호</label><input class="inp" id="auth-num" type="number" placeholder="1" min="1" max="40"></div>
+      </div>
+      <div class="mfield"><label>이름</label><input class="inp" id="auth-name" placeholder="실제 이름" maxlength="6"></div>
+      <div class="mfield">
+        <label>닉네임 <span style="font-size:11px;color:var(--text3)">글에 표시되는 이름</span></label>
+        <input class="inp" id="auth-nick" placeholder="2~12글자" maxlength="12">
+      </div>
+      <div class="mfield"><label>비밀번호</label><input class="inp" type="password" id="auth-pw" placeholder="6자 이상"></div>
+      <button class="btn btn-primary btn-block" onclick="doAuth('signup')">가입하기</button>`;
+  }
+  setTimeout(()=>document.getElementById('auth-nick')?.focus(),50);
+}
+
+async function doAuth(type){
+  const nick=document.getElementById('auth-nick')?.value.trim();
+  const pw=document.getElementById('auth-pw')?.value||'';
+
+  if(type==='login'){
+    if(!nick||!pw){toast('닉네임과 비밀번호를 입력하세요');return}
+    // 닉네임으로 가짜 이메일 생성
+    const email=`${nick}@hapseong.local`;
+    const {error}=await sb.auth.signInWithPassword({email,password:pw});
+    if(error){toast('닉네임 또는 비밀번호가 틀렸어요');return}
+    // 세션에서 닉네임 가져오기
+    S.me=nick;localStorage.setItem('me',nick);
+    closeM();toast(`반가워요, ${nick}! 🎋`);await loadAll();
+
+  }else{
+    const code=(document.getElementById('auth-code')?.value.trim()||'').toUpperCase();
+    const classN=parseInt(document.getElementById('auth-class')?.value||'0');
+    const numN=parseInt(document.getElementById('auth-num')?.value||'0');
+    const name=document.getElementById('auth-name')?.value.trim();
+    if(!code||!classN||!numN||!name||!nick||!pw){toast('모든 항목을 입력하세요');return}
+    if(pw.length<6){toast('비밀번호는 6자 이상이에요');return}
+    if(nick.length<2){toast('닉네임은 2글자 이상이에요');return}
+    if(classN<1||classN>6||numN<1||numN>40){toast('반/번호를 확인하세요');return}
+
+    // 초대코드 검증
+    const {data:codeRow}=await sb.from('invite_codes').select('grade').eq('code',code).maybeSingle();
+    if(!codeRow){toast('초대 코드가 틀렸어요 🔐');return}
+    if(codeRow.grade!==6){toast('6학년 코드가 아니에요');return}
+
+    // 닉네임 중복
+    const {data:nickCheck}=await sb.from('profiles').select('nick').eq('nick',nick).maybeSingle();
+    if(nickCheck){toast('이미 사용 중인 닉네임이에요');return}
+
+    // 반+번호+이름 중복
+    const {data:dupCheck}=await sb.from('profiles').select('nick').eq('class_num',classN).eq('student_num',numN).eq('real_name',name).maybeSingle();
+    if(dupCheck){toast('이미 가입된 정보예요. 닉네임으로 로그인하세요 👉');return}
+
+    try{
+      // Supabase Auth 계정 생성
+      const email=`${nick}@hapseong.local`;
+      const {data:authData,error:authErr}=await sb.auth.signUp({email,password:pw});
+      if(authErr)throw authErr;
+      const uid=authData.user?.id;
+      if(!uid)throw new Error('계정 생성 실패');
+
+      // profiles 저장 (user_id 포함)
+      await sb.from('profiles').insert({
+        nick,real_name:name,class_num:classN,student_num:numN,
+        verified:true,bio:'',avatar:'',user_id:uid,
+        created_at:new Date().toISOString()
+      });
+
+      S.me=nick;localStorage.setItem('me',nick);
+      closeM();toast(`${classN}반 ${numN}번 ${name}님, 환영해요! 🎋`);await loadAll();
+    }catch(e){toast('가입 실패: '+e.message)}
+  }
+}
+
+async function logout(){
+  if(!confirm('로그아웃 할까요?'))return;
+  await sb.auth.signOut();
+  S.me=null;localStorage.removeItem('me');closeM();toast('로그아웃됐어요');render();
+}
+window.openAuth=openAuth;window.doAuth=doAuth;window.authTab=authTab;window.logout=logout;
+
+// ═══ 네비게이션 ═══
+function goHome(){S.forest=null;S.channel=null;S.subview='feed';saveSes();render()}
+function goForest(id){S.forest=id;S.subview='feed';const f=S.forests[id];if(f&&f.channels.length)S.channel=f.channels[0].id;else S.channel=null;saveSes();render()}
+function goChannel(id){S.channel=id;S.subview='feed';render()}
+function goSub(v,sv){S.view=v;S.subview=sv;render()}
+function go(v,sv){S.view=v;S.subview=sv;render()}
+function goProfile(nick){S.subview='profile';S.target=nick;render()}
+function goBack(){S.subview='feed';render()}
+function openDM(nick){S.forest=null;S.subview='dm';S.dmTarget=nick;render();setTimeout(()=>{const el=document.getElementById('dm-msgs');if(el)el.scrollTop=el.scrollHeight},50)}
+function openFindForest(){S.forest=null;S.subview='findforest';render()}
+function doSearch(v){S.q=v;render();const inp=document.getElementById('search-inp');if(inp){inp.focus();inp.setSelectionRange(v.length,v.length)}}
+function openDetail(id){
+  const p=S.posts.find(x=>x.id===id);if(!p)return;
+  S.subview='detail';S.target=id;
+  sb.from('posts').update({views:(p.views||0)+1}).eq('id',id).then(()=>{}).catch(()=>{});
+  render();
+}
+
+// ═══ 액션 함수들 ═══
+async function like(id){
+  const liked=S.likes.has(id);const me=whoAmI();
+  if(liked){S.likes.delete(id);S.likeCounts[id]=Math.max(0,(S.likeCounts[id]||1)-1)}
+  else{S.likes.add(id);S.likeCounts[id]=(S.likeCounts[id]||0)+1}
+  render();
+  try{if(liked)await sb.from('likes').delete().eq('post_id',id).eq('liker',me);else await sb.from('likes').insert({post_id:id,liker:me})}catch(e){}
+}
+async function likeCmt(id){
+  const liked=S.cmtLikes.has(id);const me=whoAmI();
+  if(liked){S.cmtLikes.delete(id);S.cmtLikeCounts[id]=Math.max(0,(S.cmtLikeCounts[id]||1)-1)}
+  else{S.cmtLikes.add(id);S.cmtLikeCounts[id]=(S.cmtLikeCounts[id]||0)+1}
+  render();
+  try{if(liked)await sb.from('comment_likes').delete().eq('comment_id',id).eq('liker',me);else await sb.from('comment_likes').insert({comment_id:id,liker:me})}catch(e){}
+}
+async function toggleBookmark(id){
+  if(!S.me){toast('로그인이 필요해요');return}
+  const has=S.bookmarks.has(id);if(has)S.bookmarks.delete(id);else S.bookmarks.add(id);render();
+  try{if(has)await sb.from('bookmarks').delete().eq('post_id',id).eq('nick',S.me);else await sb.from('bookmarks').insert({post_id:id,nick:S.me})}catch(e){}
+}
+async function follow(nick){
+  if(!S.me){openAuth();return}
+  const isF=S.users[S.me]?.following.includes(nick);
+  try{if(isF)await sb.from('follows').delete().eq('follower',S.me).eq('followee',nick);else await sb.from('follows').insert({follower:S.me,followee:nick});await loadAll()}catch(e){toast('실패')}
+}
+async function delPost(id){
+  if(!confirm('삭제할까요?'))return;
+  try{await sb.from('posts').delete().eq('id',id);toast('삭제됨');S.subview='feed';await loadAll()}catch(e){toast('삭제 실패')}
+}
+async function toggleReaction(pid,emoji){
+  const me=whoAmI();const key=pid+'|'+emoji;const has=S.myReactions.has(key);
+  try{
+    if(has){S.myReactions.delete(key);if(S.reactions[pid]?.[emoji])S.reactions[pid][emoji]--;await sb.from('reactions').delete().eq('post_id',pid).eq('reactor',me).eq('emoji',emoji)}
+    else{S.myReactions.add(key);(S.reactions[pid]=S.reactions[pid]||{})[emoji]=(S.reactions[pid][emoji]||0)+1;await sb.from('reactions').insert({post_id:pid,reactor:me,emoji})}
+    render();
+  }catch(e){}
+}
+function toggleReactPop(pid){document.getElementById('rp-'+pid)?.classList.toggle('hidden')}
+function toggleReply(id){document.getElementById('rb-'+id)?.classList.toggle('hidden')}
+function share(id){
+  const p=S.posts.find(x=>x.id===id);if(!p)return;
+  const t=`[대나무숲] ${plainText(p.content).slice(0,60)}`;
+  if(navigator.share)navigator.share({title:'대나무숲',text:t});
+  else{try{navigator.clipboard.writeText(t)}catch(e){}toast('복사됨')}
+}
+function viewImg(src){
+  const v=document.createElement('div');v.className='lightbox';
+  v.innerHTML=`<button class="lightbox-close" onclick="this.parentElement.remove()">${ic('x','sm')}</button><img src="${src}" onclick="event.stopPropagation()">`;
+  v.onclick=()=>v.remove();document.body.appendChild(v);
+  document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){v.remove();document.removeEventListener('keydown',esc)}},{once:true});
+}
+function downloadFile(name,data){if(data){const a=document.createElement('a');a.href=data;a.download=name;a.click()}else{toast('파일 데이터가 없어요')}}
+function scrollToMsg(id){const el=document.getElementById('msg-'+id);if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.style.background='var(--accent-soft)';setTimeout(()=>el.style.background='',1500)}}
+function setChatReply(id,nick){chatReplyTo={id,nick};render()}
+function clearChatReply(){chatReplyTo=null;render()}
+function toggleMsgReactPop(event,msgId){
+  event.stopPropagation();
+  const emojis=['👍','❤️','😂','😮','😢','🔥','👏','🎉'];
+  let pop=document.getElementById('msg-react-pop');if(pop){pop.remove();return}
+  pop=document.createElement('div');pop.id='msg-react-pop';
+  pop.style.cssText=`position:fixed;top:${event.clientY-50}px;left:${event.clientX-80}px;background:var(--card);border:1px solid var(--line2);border-radius:12px;padding:6px;display:flex;gap:4px;z-index:600;box-shadow:var(--shadow2);animation:pop .15s ease`;
+  pop.innerHTML=emojis.map(em=>`<button style="font-size:20px;width:36px;height:36px;border-radius:8px;transition:.1s" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="toggleReaction(${msgId},'${em}');this.closest('#msg-react-pop').remove()">${em}</button>`).join('');
+  document.body.appendChild(pop);
+  setTimeout(()=>document.addEventListener('click',()=>pop?.remove(),{once:true}),50);
+}
+
+async function addCmt(pid){const inp=document.getElementById('ci-'+pid);if(!inp||!inp.value.trim())return;const content=esc(inp.value.trim());inp.value='';try{await sb.from('comments').insert({post_id:pid,author:S.me,anon_nick:S.me?null:anonNick(),content});await loadAll()}catch(e){toast('댓글 실패')}}
+async function addReply(pid,parentId){const inp=document.getElementById('ri-'+parentId);if(!inp||!inp.value.trim())return;const content=esc(inp.value.trim());inp.value='';try{await sb.from('comments').insert({post_id:pid,parent_id:parentId,author:S.me,anon_nick:S.me?null:anonNick(),content});await loadAll()}catch(e){toast('답글 실패')}}
+async function toggleJoin(id){if(!S.me){toast('로그인 필요');openAuth();return}const joined=S.myForests.has(id);try{if(joined)await sb.from('forest_members').delete().eq('forest_id',id).eq('nick',S.me);else await sb.from('forest_members').insert({forest_id:id,nick:S.me});toast(joined?'탈퇴됨':'가입했어요!');await loadAll()}catch(e){toast('실패')}}
+async function sendFriendReq(nick){if(!S.me){openAuth();return}try{await sb.from('friend_requests').insert({from_nick:S.me,to_nick:nick});toast('친구 요청을 보냈어요!');await loadAll()}catch(e){toast('이미 보냈거나 실패')}}
+async function acceptFriend(id){try{await sb.from('friend_requests').update({status:'accepted'}).eq('id',id);toast('친구가 되었어요!');await loadAll()}catch(e){toast('실패')}}
+async function rejectFriend(id){try{await sb.from('friend_requests').update({status:'rejected'}).eq('id',id);await loadAll()}catch(e){}}
+async function sendChat(chId){const inp=document.getElementById('chat-inp');if(!inp||!inp.value.trim())return;const msg=inp.value.trim();inp.value='';const forceAnon=S.composeAnon;const title=chatReplyTo?'reply:'+chatReplyTo.id:'';chatReplyTo=null;const row={channel_id:chId,forest_id:S.forest,author:forceAnon?null:S.me,anon_nick:(forceAnon||!S.me)?anonNick():null,title,content:msg,tags:[],imgs:[],files:[]};try{await sb.from('posts').insert(row);await loadAll();setTimeout(()=>{const el=document.getElementById('chat-msgs');if(el)el.scrollTop=el.scrollHeight},100)}catch(e){toast('전송 실패')}}
+function pickComposeForest(id){composeForestId=id;renderForestDD();renderChDD();closeAllDD()}
+function pickComposeCh(id){composeChId=id;renderChDD();closeAllDD()}
+function toggleDD(id){const m=document.getElementById(id)?.querySelector('.dd-menu');if(!m)return;const open=m.classList.toggle('open');if(open)document.querySelectorAll('.dd-menu.open').forEach(x=>{if(x!==m)x.classList.remove('open')})}
+function closeAllDD(){document.querySelectorAll('.dd-menu.open').forEach(x=>x.classList.remove('open'))}
+function toggleAnon(){S.composeAnon=!S.composeAnon;const sw=document.getElementById('anon-sw');const h=document.getElementById('anon-hint');if(sw)sw.classList.toggle('on',S.composeAnon);if(h)h.textContent=S.composeAnon?'익명으로 게시':'공개로 게시'}
+function rich(cmd){const map={bold:'bold',italic:'italic',underline:'underline',strike:'strikeThrough'};document.execCommand(map[cmd],false,null)}
+function openSettings(){openEditProfile()}
+
+function openEditProfile(){
+  const u=S.users[S.me];
+  const bannerBg=u?.banner?`url(${u.banner}) center/cover`:`linear-gradient(120deg,var(--accent),var(--violet))`;
+  modal(`<div class="modal-head"><h2>프로필 편집</h2><button class="modal-x" onclick="closeM()">${ic('x','sm')}</button></div>
+  <div class="modal-body" style="padding:0">
+    <div style="position:relative;height:110px;background:${bannerBg};cursor:pointer;overflow:hidden;background-size:cover" onclick="document.getElementById('prof-banner-in').click()">
+      <div style="position:absolute;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;opacity:0;transition:.2s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
+        <span style="color:#fff;font-size:13px;font-weight:700">${ic('image','sm')} 배너 변경</span>
+      </div>
+    </div>
+    <input type="file" id="prof-banner-in" accept="image/*" hidden onchange="uploadBanner(this)">
+    <div style="position:relative;height:32px">
+      <div style="position:absolute;left:20px;top:-34px;width:68px;height:68px;border-radius:50%;border:4px solid var(--card);background:var(--card2);overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.25)" onclick="document.getElementById('av-in').click()">
+        <img id="edit-av" src="${avatarOf(S.me)}" style="width:100%;height:100%;object-fit:cover">
+        <div style="position:absolute;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;opacity:0;transition:.15s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">${ic('image','xs')}</div>
+      </div>
+    </div>
+    <input type="file" id="av-in" accept="image/*" hidden onchange="uploadAvatar(this)">
+    <div style="padding:6px 20px 20px">
+      <div style="font-weight:700;font-size:15px;margin-bottom:2px">${esc(S.me)}</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px">아이콘·배너 클릭해서 변경</div>
+      <div class="mfield"><label>소개</label><input class="inp" id="edit-bio" value="${escA(u?.bio||'')}" placeholder="한줄 소개"></div>
+      <button class="btn btn-primary btn-block" onclick="saveProfile()">저장</button>
+      <button class="btn btn-block" style="margin-top:8px;color:var(--like);border:1px solid var(--like);background:transparent" onclick="logout()">로그아웃</button>
+    </div>
+  </div>`);
+}
+
+function openForestEditModal(id){
+  const f=S.forests[id];if(!f)return;editForestIcon='';editForestBanner='';
+  const iconPreview=f.icon?`<img src="${f.icon}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:`<span style="font-size:28px">${f.emoji}</span>`;
+  const bannerBg=f.banner?`url(${f.banner}) center/cover`:`linear-gradient(135deg,${f.color}cc,${f.color}44)`;
+  const palette=['#4a6cf7','#ef4444','#f59e0b','#22c55e','#8b5cf6','#ec4899','#06b6d4','#f97316','#14b8a6','#6366f1','#a855f7','#84cc16'];
+  const colorSwatches=palette.map(c=>`<div onclick="fsPick('${c}',event)" class="cswatch" style="width:32px;height:32px;border-radius:10px;background:${c};cursor:pointer;outline:${f.color===c?'3px solid var(--text)':'2px solid transparent'};outline-offset:2px"></div>`).join('');
+  modal(`
+  <div class="modal-head"><h2>⚙️ ${esc(f.name)} 설정</h2><button class="modal-x" onclick="closeM()">${ic('x','sm')}</button></div>
+  <div class="modal-body" style="padding:0">
+    <div id="fs-banner-bg" style="position:relative;height:130px;background:${bannerBg};cursor:pointer;overflow:hidden" onclick="document.getElementById('fs-banner-in').click()">
+      <div style="position:absolute;inset:0;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;opacity:0;transition:.2s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0"><span style="color:#fff;font-size:13px;font-weight:700">🖼 배너 변경</span></div>
+    </div>
+    <input type="file" id="fs-banner-in" accept="image/*" hidden onchange="previewEditBanner(this)">
+    <div style="position:relative;height:36px">
+      <div style="position:absolute;left:20px;top:-36px;width:72px;height:72px;border-radius:50%;border:4px solid var(--card);background:var(--card2);overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.25)" onclick="document.getElementById('fs-icon-in').click()">
+        <span id="fs-icon-preview">${iconPreview}</span>
+      </div>
+    </div>
+    <input type="file" id="fs-icon-in" accept="image/*" hidden onchange="previewEditIcon(this)">
+    <div style="padding:14px 20px 20px">
+      <div class="mfield"><label>숲 이름</label><input class="inp" id="fs-name" value="${escA(f.name)}"></div>
+      <div class="mfield"><label>소개</label><input class="inp" id="fs-desc" value="${escA(f.description||'')}"></div>
+      <div class="mfield">
+        <label>테마 색상</label>
+        <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px">${colorSwatches}</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div id="fs-color-preview" style="width:32px;height:32px;border-radius:10px;background:${f.color};cursor:pointer;border:2px solid var(--line2)" onclick="openFsColorPicker()"></div>
+          <span style="font-size:12px;color:var(--text3)">직접 선택</span>
+          <input type="hidden" id="fs-color" value="${f.color}">
+        </div>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="saveForest('${id}')">저장</button>
+      <div style="margin-top:20px;padding:16px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.25);border-radius:14px;text-align:center">
+        <div style="font-size:13px;font-weight:700;color:var(--like);margin-bottom:12px">⚠️ 위험 구역</div>
+        <button class="btn" style="background:var(--like);color:#fff;padding:10px 0;border-radius:10px;font-size:14px;font-weight:700;width:100%" onclick="if(confirm('정말 삭제?'))deleteForest('${id}')">🗑️ 숲 삭제</button>
+      </div>
+    </div>
+  </div>`);
+}
+function pickNfTemplate(emoji,name){nfEmoji=emoji;nfName=name;nfStep=2;_renderCreateForest()}
+function pickNfStep(step){nfStep=step;_renderCreateForest()}
+function pickNfColor(c){nfColor=c;document.querySelectorAll('.nf-palette-dot').forEach(el=>{const dc=el.dataset.color;el.style.border=dc===c?'3px solid var(--text)':'3px solid transparent';el.style.transform=dc===c?'scale(1.15)':'scale(1)'});const iconCircle=document.getElementById('nf-icon-circle');if(iconCircle){iconCircle.style.background=c+'18';iconCircle.style.borderColor=c;}const makeBtn=document.getElementById('nf-make-btn');if(makeBtn)makeBtn.style.background=c;}
+function pickNfEmoji(v){nfEmoji=v||'🎋';const el=document.getElementById('nf-emoji2');if(el)el.textContent=nfEmoji}
+function pickFSType(t){document.getElementById('nc-type').value=t;const p=document.getElementById('fst-post'),c=document.getElementById('fst-chat');if(p)p.className='btn '+(t==='post'?'btn-primary':'btn-secondary');if(c)c.className='btn '+(t==='chat'?'btn-primary':'btn-secondary')}
+function closeM(){hideToolbar();document.getElementById('ov')?.remove();document.getElementById('root')?.classList.remove('blurred')}
+// ═══ 커스텀 드롭다운 ═══
+function cdd(id,opts,value,onChange){const cur=opts.find(o=>o.v===value)||opts[0];return `<div class="cdd" id="cdd-${id}"><div class="cdd-trigger" onclick="toggleCDD('${id}')"><span id="cdd-${id}-label">${cur.l}</span><span class="cdd-arrow">▾</span></div><div class="cdd-menu hidden" id="cdd-${id}-menu">${opts.map(o=>`<div class="cdd-opt ${o.v===value?'selected':''}" onclick="pickCDD('${id}','${o.v}','${o.l.replace(/'/g,"\\'")}','${onChange}')">${o.l}</div>`).join('')}</div></div>`}
+function toggleCDD(id){const m=document.getElementById('cdd-'+id+'-menu');const w=document.getElementById('cdd-'+id);if(!m||!w)return;const on=!m.classList.contains('hidden');document.querySelectorAll('.cdd-menu').forEach(x=>x.classList.add('hidden'));document.querySelectorAll('.cdd').forEach(x=>x.classList.remove('open'));if(!on){m.classList.remove('hidden');w.classList.add('open')}}
+function pickCDD(id,val,label,cb){document.getElementById('cdd-'+id+'-label').textContent=label;document.getElementById('cdd-'+id+'-menu')?.classList.add('hidden');document.getElementById('cdd-'+id)?.classList.remove('open');if(cb&&window[cb])window[cb](val)}
+
+// ═══ 태그/투표/구독/차단/신고/역할/알림/임시저장/예약/멘션 ═══
+function searchByTag(tag){S.q=tag;window._searchTab='게시글';go('home','search');setTimeout(()=>{const el=document.getElementById('search-inp');if(el){el.value=tag;doSearch(tag)}},50)}
+async function votePoll(postId,optIdx){if(!S.me){toast('로그인 필요');openAuth();return}const hasVoted=[...S.myPollVotes].some(k=>k.startsWith(postId+'|'));if(hasVoted){toast('이미 투표했어요');return}try{await sb.from('poll_votes').insert({post_id:postId,option_idx:optIdx,voter:S.me});S.myPollVotes.add(postId+'|'+optIdx);if(!S.polls[postId])S.polls[postId]={};S.polls[postId][optIdx]=(S.polls[postId][optIdx]||0)+1;toast('투표했어요!');render()}catch(e){toast('투표 실패')}}
+function renderPoll(post){const poll=post.poll;if(!poll||!poll.options)return '';const totalVotes=Object.values(S.polls[post.id]||{}).reduce((a,b)=>a+b,0);const hasVoted=[...S.myPollVotes].some(k=>k.startsWith(post.id+'|'));return `<div class="poll-wrap"><div style="font-size:13px;font-weight:700;margin-bottom:10px">📊 ${esc(poll.question||'투표')}</div>${poll.options.map((opt,i)=>{const cnt=(S.polls[post.id]||{})[i]||0;const pct=totalVotes?Math.round(cnt/totalVotes*100):0;const myVote=S.myPollVotes.has(post.id+'|'+i);return `<div class="poll-option" onclick="${hasVoted?'':'votePoll('+post.id+','+i+')'}"><div class="poll-bar-wrap"><div class="poll-bar" style="width:${pct}%;background:${myVote?'var(--accent)':'var(--accent-soft)'}"></div><span class="poll-bar-label">${esc(opt)}${myVote?' ✓':''}</span><span class="poll-bar-pct">${hasVoted?pct+'%':''}</span></div></div>`}).join('')}<div class="poll-meta">총 ${totalVotes}표</div></div>`}
+async function toggleSubscribe(postId){if(!S.me){toast('로그인 필요');return}const on=S.postSubscriptions.has(postId);try{if(on){await sb.from('post_subscriptions').delete().eq('post_id',postId).eq('nick',S.me);S.postSubscriptions.delete(postId);toast('구독 해제됨')}else{await sb.from('post_subscriptions').insert({post_id:postId,nick:S.me});S.postSubscriptions.add(postId);toast('구독됨')}render()}catch(e){toast('실패')}}
+async function blockUser(nick){if(!S.me){toast('로그인 필요');return}if(!confirm(`${nick}님을 차단할까요?`))return;try{await sb.from('blocked_users').insert({blocker:S.me,blocked:nick})}catch(e){}S.blockedUsers.add(nick);toast(`${nick}님을 차단했어요`);render()}
+async function unblockUser(nick){if(!S.me)return;try{await sb.from('blocked_users').delete().eq('blocker',S.me).eq('blocked',nick);S.blockedUsers.delete(nick);toast('차단 해제됨');render()}catch(e){}}
+async function reportPost(postId){if(!S.me){toast('로그인 필요');return}const reason=prompt('신고 이유:');if(!reason)return;try{await sb.from('reports').insert({reporter:S.me,post_id:postId,reason})}catch(e){}toast('신고 접수됨')}
+async function reportUser(nick){if(!S.me){toast('로그인 필요');return}const reason=prompt(`${nick}님 신고 이유:`);if(!reason)return;try{await sb.from('reports').insert({reporter:S.me,reported_nick:nick,reason})}catch(e){}toast('신고 접수됨')}
+async function setMemberRole(forestId,nick,role){const f=S.forests[forestId];if(!f||f.owner!==S.me){toast('숲주인만 역할을 바꿀 수 있어요');return}try{await sb.from('forest_members').update({role}).eq('forest_id',forestId).eq('nick',nick);toast(`${nick}님의 역할을 ${role}로 변경했어요`);await loadAll()}catch(e){toast('실패')}}
+function getRoleBadge(forestId,nick){const role=(S.memberRoles[forestId]||{})[nick];if(role==='owner')return `<span class="role-owner">👑 숲주인</span>`;if(role==='mod')return `<span class="role-mod">🛡 관리자</span>`;return ''}
+async function markAllNotifRead(){if(!S.me||!S.notifications.length)return;const ids=S.notifications.filter(n=>!n.read_at).map(n=>n.id);if(!ids.length)return;try{await sb.from('notifications').update({read_at:new Date().toISOString()}).in('id',ids);S.unreadNotifCount=0;render()}catch(e){}}
+function saveDraft(){const ed=document.getElementById('editor');const title=document.getElementById('c-title')?.value||'';const content=ed?ed.innerHTML:'';if(!title&&!content)return;const key='draft_'+Date.now();try{const drafts=JSON.parse(localStorage.getItem('bamboo_drafts')||'{}');drafts[key]={key,title,content,time:new Date().toISOString()};localStorage.setItem('bamboo_drafts',JSON.stringify(drafts))}catch(e){}toast('임시저장됨')}
+function loadDrafts(){try{return JSON.parse(localStorage.getItem('bamboo_drafts')||'{}')}catch(e){return{}}}
+function openDrafts(){const drafts=loadDrafts();const keys=Object.keys(drafts);if(!keys.length){toast('임시저장 없음');return}const items=keys.map(k=>{const d=drafts[k];return `<div style="padding:12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;background:var(--card2)" onclick="restoreDraft('${k}')"><div style="font-weight:600;margin-bottom:4px">${esc(d.title||'(제목 없음)')}</div><div style="font-size:12px;color:var(--text3)">${ago(d.time)}</div></div>`}).join('');modal(`<div class="modal-head"><h2>임시저장</h2><button class="modal-x" onclick="closeM()">✕</button></div><div class="modal-body">${items}</div>`)}
+function restoreDraft(key){const drafts=loadDrafts();const d=drafts[key];if(!d)return;closeM();setTimeout(()=>{openCompose();setTimeout(()=>{const ed=document.getElementById('editor');const t=document.getElementById('c-title');if(ed)ed.innerHTML=d.content||'';if(t)t.value=d.title||''},100)},100)}
+function openSchedulePicker(){const now=new Date(Date.now()+3600000);const iso=now.toISOString().slice(0,16);modal(`<div class="modal-head"><h2>예약 게시</h2><button class="modal-x" onclick="closeM()">✕</button></div><div class="modal-body"><div class="mfield"><label>게시 시간</label><input class="inp" type="datetime-local" id="sch-time" value="${iso}"></div><div style="display:flex;gap:8px"><button class="btn btn-secondary" style="flex:1" onclick="S._scheduleTime=null;closeM();toast('예약 취소')">취소</button><button class="btn btn-primary" style="flex:2" onclick="setSchedule()">설정</button></div></div>`)}
+function setSchedule(){const v=document.getElementById('sch-time')?.value;if(!v){toast('시간 선택');return}S._scheduleTime=v;closeM();toast('예약됨')}
+function parseMentions(text){return text.replace(/@(\w+)/g,(m,nick)=>{if(S.users[nick])return `<span class="mention" onclick="goProfile('${nick}')">@${esc(nick)}</span>`;return m})}
+async function deleteDM(id){if(!confirm('메시지 삭제?'))return;try{await sb.from('direct_messages').update({deleted:true,content:''}).eq('id',id).eq('from_nick',S.me);toast('삭제됨');await loadAll()}catch(e){toast('실패')}}
+function setVisibility(v){S._postVisibility=v;['public','members','friends'].forEach(k=>{const btn=document.getElementById('vis-'+k);if(btn){btn.style.borderColor=k===v?'var(--accent)':'var(--line)';btn.style.color=k===v?'var(--accent)':'var(--text2)'}})}
+function addComposePoll(){const w=document.getElementById('compose-poll-wrap');if(!w)return;if(S._composePoll){S._composePoll=null;w.innerHTML='';return}S._composePoll={question:'',options:['','']};renderComposePoll()}
+function renderComposePoll(){const w=document.getElementById('compose-poll-wrap');if(!w||!S._composePoll)return;w.innerHTML=`<div class="poll-wrap" style="margin-bottom:12px"><div style="font-size:13px;font-weight:700;margin-bottom:8px">📊 투표 설정</div><input class="inp" style="margin-bottom:8px" placeholder="질문" value="${escA(S._composePoll.question)}" oninput="S._composePoll.question=this.value">${S._composePoll.options.map((o,i)=>`<div style="display:flex;gap:6px;margin-bottom:6px"><input class="inp" style="flex:1" placeholder="선택지 ${i+1}" value="${escA(o)}" oninput="S._composePoll.options[${i}]=this.value">${S._composePoll.options.length>2?`<button onclick="S._composePoll.options.splice(${i},1);renderComposePoll()" style="color:var(--like)">✕</button>`:''}</div>`).join('')}${S._composePoll.options.length<5?`<button onclick="S._composePoll.options.push('');renderComposePoll()" style="font-size:13px;color:var(--accent)">+ 선택지</button>`:''}</div>`}
+
+// ═══ 멘션 자동완성 ═══
+let _mentionState={active:false,query:'',inputId:null,selectedIdx:0,matches:[]};
+function setupMentionAutocomplete(inputId){const inp=document.getElementById(inputId);if(!inp||inp._mentionSetup)return;inp._mentionSetup=true;inp.addEventListener('input',function(){const val=this.value;const cursor=this.selectionStart;const before=val.slice(0,cursor);const atMatch=before.match(/@(\w*)$/);if(atMatch){_mentionState={active:true,query:atMatch[1].toLowerCase(),inputId,selectedIdx:0,matches:Object.keys(S.users).filter(n=>n.toLowerCase().includes(atMatch[1].toLowerCase())&&n!==S.me).slice(0,6)};showMentionPop(this)}else closeMentionPop()});inp.addEventListener('keydown',function(e){if(!_mentionState.active||!_mentionState.matches.length)return;if(e.key==='ArrowDown'){e.preventDefault();_mentionState.selectedIdx=(_mentionState.selectedIdx+1)%_mentionState.matches.length;updateMentionPop()}else if(e.key==='ArrowUp'){e.preventDefault();_mentionState.selectedIdx=(_mentionState.selectedIdx-1+_mentionState.matches.length)%_mentionState.matches.length;updateMentionPop()}else if(e.key==='Enter'||e.key==='Tab'){if(_mentionState.active&&_mentionState.matches.length){e.preventDefault();pickMention(_mentionState.matches[_mentionState.selectedIdx])}}else if(e.key==='Escape')closeMentionPop()});inp.addEventListener('blur',()=>setTimeout(closeMentionPop,150))}
+function showMentionPop(el){let pop=document.getElementById('mention-autocomplete');if(!pop){pop=document.createElement('div');pop.id='mention-autocomplete';pop.className='mention-pop';document.body.appendChild(pop)}const r=el.getBoundingClientRect();pop.style.cssText=`position:fixed;left:${r.left}px;bottom:${window.innerHeight-r.top+4}px;display:block`;updateMentionPop()}
+function updateMentionPop(){const pop=document.getElementById('mention-autocomplete');if(!pop)return;const {matches,selectedIdx}=_mentionState;if(!matches.length){pop.innerHTML=`<div style="padding:12px;font-size:13px;color:var(--text3);text-align:center">없음</div>`;return}pop.innerHTML=matches.map((nick,i)=>`<div class="mention-item ${i===selectedIdx?'selected':''}" onmousedown="event.preventDefault();pickMention('${nick}')"><div class="av"><img src="${avatarOf(nick)}" style="width:28px;height:28px;border-radius:50%"></div><span style="font-weight:600;font-size:13px">${esc(nick)}</span></div>`).join('')}
+function pickMention(nick){const inp=document.getElementById(_mentionState.inputId);if(!inp)return;const val=inp.value;const cursor=inp.selectionStart;const before=val.slice(0,cursor).replace(/@(\w*)$/,'@'+nick+' ');inp.value=before+val.slice(cursor);inp.focus();inp.selectionStart=inp.selectionEnd=before.length;closeMentionPop()}
+function closeMentionPop(){_mentionState.active=false;const pop=document.getElementById('mention-autocomplete');if(pop)pop.style.display='none'}
+
+async function deleteForest(id){try{await sb.from('channels').delete().eq('forest_id',id);await sb.from('forest_members').delete().eq('forest_id',id);await sb.from('forests').delete().eq('id',id);closeM();toast('숲 삭제됨');goHome();await loadAll()}catch(e){toast('삭제 실패')}}
+
+async function sendDM(){
+  if(!S.me){toast('로그인 필요');return}
+  const inp=document.getElementById('dm-inp');
+  const msg=inp?.value.trim()||'';
+  if(!msg&&!S._dmImg)return;
+  if(inp)inp.value='';
+  const row={from_nick:S.me,to_nick:S.dmTarget,content:msg||''};
+  if(_dmReplyTo){row.reply_to=_dmReplyTo.id;_dmReplyTo=null;}
+  S._dmImg=null;
+  try{
+    await sb.from('direct_messages').insert(row);
+    try{if(S.dmTarget!==S.me)await sb.from('notifications').insert({to_nick:S.dmTarget,from_nick:S.me,type:'dm',message:`${esc(S.me)}님이 메시지를 보냈어요`})}catch(_){}
+    await loadAll();
+    setTimeout(()=>{const el=document.getElementById('dm-msgs');if(el)el.scrollTo({top:el.scrollHeight,behavior:'smooth'})},100);
+  }catch(e){toast('전송 실패: '+e.message)}
+}
+
+function openCompose(){
+  pImgs=[];pFiles=[];S.composeAnon=!S.me;
+  composeForestId=S.forest||'free';
+  const curF=S.forests[composeForestId];
+  const postChs=curF?curF.channels.filter(c=>c.type==='post'):[];
+  composeChId=S.channel&&postChs.find(c=>c.id===S.channel)?S.channel:(postChs[0]?.id||null);
+  const as=S.me?`<div class="compose-as"><div class="a"><img src="${avatarOf(S.me)}"></div><div><div style="font-weight:600">${esc(S.me)}</div><div style="font-size:12px;color:var(--text3)" id="anon-hint">공개로 게시</div></div><div class="switch-row">익명 <div class="switch" id="anon-sw" onclick="toggleAnon()"></div></div></div>`:`<div class="compose-as"><div class="a anon">${ic('user','sm')}</div><div style="font-weight:600">익명</div></div>`;
+  modal(`<div class="modal-head"><h2>새 게시물</h2><button class="modal-x" onclick="closeM()">${ic('x','sm')}</button></div><div class="modal-body">${as}<div class="mfield"><label>숲</label><div class="dropdown" id="dd-forest"><div class="dd-trigger" onclick="toggleDD('dd-forest')"><span id="dd-forest-label"></span><span style="margin-left:auto;color:var(--text3)">${ic('chevDown','xs')}</span></div><div class="dd-menu" id="dd-forest-menu"></div></div></div><div class="mfield"><label>채널</label><div class="dropdown" id="dd-ch"><div class="dd-trigger" onclick="toggleDD('dd-ch')"><span id="dd-ch-label"></span><span style="margin-left:auto;color:var(--text3)">${ic('chevDown','xs')}</span></div><div class="dd-menu" id="dd-ch-menu"></div></div></div><div class="mfield"><label>제목</label><input class="inp" id="c-title" placeholder="제목을 입력하세요" maxlength="60"></div><div class="mfield"><label>내용</label><div class="editor" id="editor" contenteditable="true" data-ph="내용을 작성하세요. 드래그해서 꾸미기 가능!"></div><div class="fmt-tools"><button class="fmt-btn" onclick="rich('bold')" style="font-weight:800">B</button><button class="fmt-btn" onclick="rich('italic')" style="font-style:italic">I</button><button class="fmt-btn" onclick="rich('underline')" style="text-decoration:underline">U</button><button class="fmt-btn" onclick="rich('strike')" style="text-decoration:line-through">S</button><div class="attach-bar"><button onclick="document.getElementById('img-in').click()">${ic('image','sm')}</button><button onclick="document.getElementById('file-in').click()">${ic('file','sm')}</button></div></div></div><div id="c-preview" class="preview-grid"></div><input type="file" id="img-in" accept="image/*" multiple hidden onchange="pickImg(this)"><input type="file" id="file-in" multiple hidden onchange="pickFile(this)"><div class="mfield"><label>태그 (쉼표 구분)</label><input class="inp" id="c-tags" placeholder="예: 일상, 질문"></div><button class="btn btn-primary btn-block" onclick="submitPost()">게시하기</button></div>`);
+  renderForestDD();renderChDD();
+  setTimeout(()=>document.getElementById('c-title')?.focus(),100);
+}
+function openCreateForest(){
+  if(!S.me){toast('로그인 필요');openAuth();return}
+  newForestIcon='';newForestBanner='';nfStep=1;nfColor='#4a6cf7';nfEmoji='🎋';nfName='';
+  _renderCreateForest();
+}
+function openNfColorPicker(){
+  if(document.getElementById('nf-cpicker'))return;
+  const swatch=document.getElementById('nf-color-swatch');
+  if(!swatch)return;
+  const rect=swatch.getBoundingClientRect();
+
+  const pop=document.createElement('div');
+  pop.id='nf-cpicker';
+  pop.style.cssText=`position:fixed;z-index:9999;background:var(--card);border:1px solid var(--line2);border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.18);padding:14px;width:240px;top:${Math.min(rect.bottom+8, window.innerHeight-300)}px;left:${Math.min(rect.left, window.innerWidth-250)}px;user-select:none`;
+
+  pop.innerHTML=`
+    <canvas id="nf-cp-canvas" width="212" height="140" style="width:212px;height:140px;border-radius:10px;cursor:crosshair;display:block"></canvas>
+    <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
+      <canvas id="nf-cp-hue" width="180" height="16" style="width:180px;height:16px;border-radius:8px;cursor:pointer;flex:1"></canvas>
+      <div id="nf-cp-preview" style="width:28px;height:28px;border-radius:50%;border:2px solid var(--line2);flex-shrink:0"></div>
+    </div>
+    <div style="margin-top:8px;display:flex;align-items:center;gap:6px">
+      <span style="font-size:12px;color:var(--text3)">#</span>
+      <input id="nf-cp-hex" maxlength="6" style="flex:1;background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-size:13px;font-family:monospace;color:var(--text);outline:none" oninput="nfCpHexInput(this.value)">
+      <button onclick="closeNfColorPicker(true)" style="padding:5px 12px;border-radius:8px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;border:none">확인</button>
+    </div>`;
+
+  document.body.appendChild(pop);
+
+  // State
+  let hue=0, sat=1, val=1, cpDragging=false, hueDragging=false;
+
+  // Parse current color
+  function hexToHsv(hex){
+    hex=hex.replace('#','');
+    if(hex.length!==6)return{h:0,s:1,v:1};
+    const r=parseInt(hex.slice(0,2),16)/255,g=parseInt(hex.slice(2,4),16)/255,b=parseInt(hex.slice(4,6),16)/255;
+    const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;
+    let h=0;
+    if(d){if(max===r)h=((g-b)/d)%6;else if(max===g)h=(b-r)/d+2;else h=(r-g)/d+4;h=((h*60)+360)%360}
+    return{h,s:max?d/max:0,v:max};
+  }
+  function hsvToHex(h,s,v){
+    const f=n=>{const k=(n+h/60)%6;return v-v*s*Math.max(0,Math.min(k,4-k,1))};
+    const r=f(5),g=f(3),b=f(1);
+    return '#'+[r,g,b].map(x=>Math.round(x*255).toString(16).padStart(2,'0')).join('');
+  }
+
+  const parsed=hexToHsv(nfColor);
+  hue=parsed.h; sat=parsed.s; val=parsed.v;
+
+  // Draw spectrum canvas
+  const cv=document.getElementById('nf-cp-canvas');
+  const ctx=cv.getContext('2d');
+  function drawSpectrum(){
+    const W=cv.width,H=cv.height;
+    const hGrad=ctx.createLinearGradient(0,0,W,0);
+    hGrad.addColorStop(0,'#fff');
+    hGrad.addColorStop(1,`hsl(${hue},100%,50%)`);
+    ctx.fillStyle=hGrad; ctx.fillRect(0,0,W,H);
+    const vGrad=ctx.createLinearGradient(0,0,0,H);
+    vGrad.addColorStop(0,'rgba(0,0,0,0)');
+    vGrad.addColorStop(1,'#000');
+    ctx.fillStyle=vGrad; ctx.fillRect(0,0,W,H);
+    // cursor
+    const cx=sat*W, cy=(1-val)*H;
+    ctx.beginPath(); ctx.arc(cx,cy,7,0,Math.PI*2);
+    ctx.strokeStyle='#fff'; ctx.lineWidth=2.5; ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx,cy,5,0,Math.PI*2);
+    ctx.strokeStyle='rgba(0,0,0,0.4)'; ctx.lineWidth=1.5; ctx.stroke();
+  }
+
+  // Draw hue slider
+  const hc=document.getElementById('nf-cp-hue');
+  const hctx=hc.getContext('2d');
+  function drawHue(){
+    const grad=hctx.createLinearGradient(0,0,hc.width,0);
+    for(let i=0;i<=6;i++)grad.addColorStop(i/6,`hsl(${i*60},100%,50%)`);
+    hctx.fillStyle=grad; hctx.fillRect(0,0,hc.width,hc.height);
+  }
+
+  function updatePreview(){
+    const hex=hsvToHex(hue,sat,val);
+    document.getElementById('nf-cp-preview').style.background=hex;
+    const hi=document.getElementById('nf-cp-hex');
+    if(hi&&document.activeElement!==hi)hi.value=hex.replace('#','');
+  }
+
+  drawSpectrum(); drawHue(); updatePreview();
+
+  // Spectrum mouse events
+  function pickSpectrum(e){
+    const r=cv.getBoundingClientRect();
+    sat=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
+    val=Math.max(0,Math.min(1,1-(e.clientY-r.top)/r.height));
+    drawSpectrum(); updatePreview();
+  }
+  cv.onmousedown=e=>{cpDragging=true;pickSpectrum(e);e.preventDefault()};
+  cv.ontouchstart=e=>{cpDragging=true;pickSpectrum(e.touches[0]);e.preventDefault()};
+
+  // Hue slider
+  function pickHue(e){
+    const r=hc.getBoundingClientRect();
+    hue=Math.max(0,Math.min(360,((e.clientX-r.left)/r.width)*360));
+    drawSpectrum(); updatePreview();
+  }
+  hc.onmousedown=e=>{hueDragging=true;pickHue(e);e.preventDefault()};
+  hc.ontouchstart=e=>{hueDragging=true;pickHue(e.touches[0]);e.preventDefault()};
+
+  document.addEventListener('mousemove',function onMove(e){
+    if(cpDragging)pickSpectrum(e);
+    else if(hueDragging)pickHue(e);
+  });
+  document.addEventListener('mouseup',function onUp(){cpDragging=false;hueDragging=false});
+  document.addEventListener('touchmove',function onTM(e){
+    if(cpDragging)pickSpectrum(e.touches[0]);
+    else if(hueDragging)pickHue(e.touches[0]);
+    e.preventDefault();
+  },{passive:false});
+  document.addEventListener('touchend',function onTE(){cpDragging=false;hueDragging=false});
+
+  // Hex input handler
+  window.nfCpHexInput=function(v){
+    if(v.length===6){const p=hexToHsv(v);hue=p.h;sat=p.s;val=p.v;drawSpectrum();updatePreview();}
+  };
+
+  window.closeNfColorPicker=function(apply){
+    if(apply){const hex=hsvToHex(hue,sat,val);pickNfColor(hex);}
+    pop.remove();
+    setTimeout(()=>document.removeEventListener('mousedown',outsideClick),0);
+  };
+
+  // Close on outside click
+  setTimeout(()=>{
+    function outsideClick(e){if(!pop.contains(e.target)&&e.target!==swatch){closeNfColorPicker(false)}}
+    document.addEventListener('mousedown',outsideClick);
+  },100);
+}
+
+function renderForestDD(){
+  const label=document.getElementById('dd-forest-label');const menu=document.getElementById('dd-forest-menu');if(!label||!menu)return;
+  const f=S.forests[composeForestId];
+  label.innerHTML=f?`${f.emoji} ${esc(f.name)}`:'숲 선택';
+  menu.innerHTML=Object.values(S.forests).map(x=>`<div class="dd-opt ${x.id===composeForestId?'on':''}" onclick="pickComposeForest('${x.id}')">${x.emoji} ${esc(x.name)}</div>`).join('');
+}
+function renderChDD(){
+  const label=document.getElementById('dd-ch-label');const menu=document.getElementById('dd-ch-menu');if(!label||!menu)return;
+  const f=S.forests[composeForestId];const chs=f?f.channels.filter(c=>c.type==='post'):[];
+  if(!composeChId||!chs.find(c=>c.id===composeChId))composeChId=chs[0]?.id||null;
+  const ch=chs.find(c=>c.id===composeChId);
+  label.innerHTML=ch?`# ${esc(ch.name)}`:'<span style="color:var(--text3)">채널 없음</span>';
+  menu.innerHTML=chs.length?chs.map(c=>`<div class="dd-opt ${c.id===composeChId?'on':''}" onclick="pickComposeCh(${c.id})"># ${esc(c.name)}</div>`).join(''):'<div style="padding:12px;font-size:13px;color:var(--text3)">채널이 없어요. 숲 설정에서 추가하세요.</div>';
+}
+
 // ═══ GLOBAL EXPORTS ═══
 Object.assign(window,{render,goHome,goForest,goChannel,goSub,go,goProfile,goBack,openDetail,doSearch,openDM,openFindForest,like,toggleBookmark,likeCmt,toggleReply,addCmt,addReply,delPost,follow,toggleJoin,toggleReaction,toggleReactPop,share,viewImg,downloadFile,sendFriendReq,acceptFriend,rejectFriend,sendDM,sendChat,setChatReply,clearChatReply,scrollToMsg,toggleMsgReactPop,openCompose,renderForestDD,renderChDD,pickComposeForest,pickComposeCh,toggleDD,closeAllDD,toggleAnon,rich,pickImg,pickFile,drawPreview,submitPost,openAuth,doAuth,openEditProfile,uploadAvatar,uploadBanner,saveProfile,logout,openSettings,toggleTheme,openCreateForest,_renderCreateForest,_setModalContent,pickNfTemplate,pickNfStep,pickNfColor,pickNfEmoji,previewForestIcon,previewForestBanner,createForest,openForestSettings,openForestEditModal,pickFSType,previewEditIcon,previewEditBanner,saveForest,addChannel,openAddChannel,pickChType,openEdit,saveEdit,closeM,toggleMemberPanel,togglePinPanel,toggleNotifPanel,closeSidePanel,openGifPop,insertChatEmoji,toggleChatEmoji,chatAttachImg,openNfColorPicker,
   cdd,toggleCDD,pickCDD,
@@ -1790,8 +2323,10 @@ window.S=S;window.pImgs=pImgs;window.pFiles=pFiles;
 Object.defineProperties(window,{nfStep:{get:()=>nfStep,set:v=>{nfStep=v}},nfColor:{get:()=>nfColor,set:v=>{nfColor=v}},nfEmoji:{get:()=>nfEmoji,set:v=>{nfEmoji=v}},nfName:{get:()=>nfName,set:v=>{nfName=v}}});
 
 // ═══ INIT ═══
-loadSes();
-loadAll();
+(async()=>{
+  await loadSes();
+  await loadAll();
+})();
 </script>
 </body>
 </html>
