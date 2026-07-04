@@ -1401,49 +1401,70 @@ function memberPanel(){
 }
 // GIF/이모지 기능
 // ═══ GIF - Tenor API 실제 연동 ═══
-const TENOR_KEY='AIzaSyAyimkuYQYF_y_MxAi8_GKDchIHb-PORIE'; // Tenor v2 무료키 (데모)
+// GIF - Tenor v1 (API 키 불필요)
 let _gifChId=null,_gifQuery='';
 
 async function openGifPop(chId){
   _gifChId=chId;
-  const existing=document.getElementById('gif-pop-el');if(existing){existing.remove();return}
+  const existing=document.getElementById('gif-pop-el');if(existing){existing.remove();document.getElementById('gif-ov')?.remove();return}
   const pop=document.createElement('div');pop.id='gif-pop-el';
-  pop.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--card);border:1px solid var(--line2);border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.35);z-index:2000;width:420px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;animation:modalPop .2s ease';
+  pop.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--card);border:1px solid var(--line2);border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.35);z-index:2000;width:440px;max-width:95vw;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;animation:modalPop .2s ease';
+  const cats=['🔥인기','😂웃긴','🥺귀여운','😎밈','🎉축하','😢슬픈','😡화남','🐱고양이','🐶강아지'];
   pop.innerHTML=`
-    <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)">
-      <span style="font-weight:700;font-size:13px">GIF</span>
-      <input id="gif-search" class="inp" placeholder="GIF 검색..." style="flex:1;padding:6px 10px;font-size:13px;border-radius:8px" oninput="searchGif(this.value)">
-      <button onclick="document.getElementById('gif-pop-el')?.remove()" style="color:var(--text3)">${ic('x','sm')}</button>
+    <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)">
+      <span style="font-weight:800;font-size:14px">GIF</span>
+      <input id="gif-search" class="inp" placeholder="GIF 검색..." style="flex:1;padding:7px 12px;font-size:13px;border-radius:10px" oninput="gifSearchDebounce(this.value)">
+      <button onclick="document.getElementById('gif-pop-el')?.remove();document.getElementById('gif-ov')?.remove()" style="color:var(--text3)">${ic('x','sm')}</button>
+    </div>
+    <div style="display:flex;gap:6px;padding:8px 12px;overflow-x:auto;flex-shrink:0;border-bottom:1px solid var(--line);scrollbar-width:none">
+      ${cats.map((c,i)=>`<button onclick="document.getElementById('gif-search').value='';searchGif('${c.replace(/[🔥😂🥺😎🎉😢😡🐱🐶]/u,'').trim()}')" style="padding:5px 12px;border-radius:20px;font-size:12.5px;font-weight:600;white-space:nowrap;background:${i===0?'var(--accent)':'var(--card2)'};color:${i===0?'#fff':'var(--text2)'};border:none;cursor:pointer;flex-shrink:0">${c}</button>`).join('')}
     </div>
     <div id="gif-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:8px;overflow-y:auto;flex:1">
-      <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text3)">검색어를 입력하세요</div>
+      <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text3)">불러오는 중...</div>
     </div>`;
   document.body.appendChild(pop);
-  // 배경 오버레이
   const ov=document.createElement('div');ov.id='gif-ov';ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1999;backdrop-filter:blur(2px)';ov.onclick=()=>{pop.remove();ov.remove()};document.body.appendChild(ov);
-  setTimeout(()=>{
-    document.getElementById('gif-search')?.focus();
-    searchGif('trending');
-  },50);
+  setTimeout(()=>{document.getElementById('gif-search')?.focus();searchGif('trending')},50);
+}
+
+let _gifDebounce=null;
+function gifSearchDebounce(q){
+  clearTimeout(_gifDebounce);
+  _gifDebounce=setTimeout(()=>searchGif(q),400);
 }
 
 async function searchGif(q){
   _gifQuery=q;
   const grid=document.getElementById('gif-grid');if(!grid)return;
-  grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--text3)">로딩 중...</div>`;
+  grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text3)">🔍 로딩 중...</div>`;
   try{
-    const endpoint=q==='trending'
-      ?`https://tenor.googleapis.com/v2/featured?key=${TENOR_KEY}&limit=18&media_filter=gif&contentfilter=medium`
-      :`https://tenor.googleapis.com/v2/search?key=${TENOR_KEY}&q=${encodeURIComponent(q)}&limit=18&media_filter=gif&contentfilter=medium`;
-    const res=await fetch(endpoint);
+    const isTrending=!q||q==='trending'||q==='🔥인기';
+    // Tenor v1 - API 키 불필요
+    const url=isTrending
+      ?`https://api.tenor.com/v1/trending?key=LIVDSRZULELA&limit=20&media_filter=minimal&contentfilter=medium&locale=ko_KR`
+      :`https://api.tenor.com/v1/search?key=LIVDSRZULELA&q=${encodeURIComponent(q)}&limit=20&media_filter=minimal&contentfilter=medium&locale=ko_KR`;
+    const res=await fetch(url);
+    if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();
-    if(!data.results?.length){grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--text3)">결과 없음</div>`;return}
-    grid.innerHTML=data.results.map(r=>{
-      const url=r.media_formats?.tinygif?.url||r.media_formats?.gif?.url||'';
-      return `<div onclick="sendGif('${url}')" style="cursor:pointer;border-radius:8px;overflow:hidden;aspect-ratio:1;background:var(--card2)"><img src="${url}" style="width:100%;height:100%;object-fit:cover" loading="lazy"></div>`;
+    const results=data.results||[];
+    if(!results.length){
+      grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text3)">😢 결과가 없어요</div>`;
+      return;
+    }
+    grid.innerHTML=results.map(r=>{
+      // v1은 media[0].tinygif.url
+      const media=r.media?.[0];
+      const gifUrl=media?.tinygif?.url||media?.gif?.url||'';
+      if(!gifUrl)return '';
+      const safe=gifUrl.replace(/'/g,'%27');
+      return `<div onclick="sendGif('${safe}')" style="cursor:pointer;border-radius:8px;overflow:hidden;aspect-ratio:1;background:var(--card2);transition:transform .15s" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform=''"><img src="${gifUrl}" style="width:100%;height:100%;object-fit:cover" loading="lazy"></div>`;
     }).join('');
-  }catch(e){grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--text3)">불러오기 실패</div>`}
+  }catch(e){
+    console.error('GIF 에러:',e);
+    grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text3)">😥 불러오기 실패<br><small>${e.message}</small></div>`;
+  }
 }
+window.gifSearchDebounce=gifSearchDebounce;
 
 async function sendGif(url){
   document.getElementById('gif-pop-el')?.remove();
