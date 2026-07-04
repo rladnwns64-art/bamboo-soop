@@ -11,8 +11,8 @@
   --bg:#ffffff;--bg2:#f5f6f8;--card:#ffffff;--card2:#f0f1f4;--card3:#e8e9ed;
   --hover:#ececef;--line:#e2e3e8;--line2:#d1d3d9;
   --text:#1a1b1e;--text2:#5c5e66;--text3:#9194a0;
-  --accent:#4a6cf7;--accent2:#3b5ce5;--accent-soft:#eef1fe;
-  --like:#ef4444;--green:#22c55e;--gold:#f59e0b;--violet:#8b5cf6;
+  --accent:#2563eb;--accent2:#1d4ed8;--accent-soft:#eff6ff;
+  --like:#ef4444;--green:#22c55e;--gold:#f59e0b;--violet:#3b82f6;
   --r:14px;--rs:10px;
   --shadow:0 1px 3px rgba(0,0,0,0.06),0 1px 2px rgba(0,0,0,0.04);
   --shadow2:0 4px 12px rgba(0,0,0,0.08);
@@ -21,7 +21,7 @@
   --bg:#16171c;--bg2:#1c1d23;--card:#22232a;--card2:#2a2b33;--card3:#33343e;
   --hover:#2e2f38;--line:#2e2f38;--line2:#3a3b45;
   --text:#e8e9ed;--text2:#9a9ba5;--text3:#6b6c78;
-  --accent:#6b8aff;--accent2:#5a78f0;--accent-soft:rgba(107,138,255,0.12);
+  --accent:#3b82f6;--accent2:#2563eb;--accent-soft:rgba(59,130,246,0.12);
   --shadow:0 1px 3px rgba(0,0,0,0.2);--shadow2:0 4px 12px rgba(0,0,0,0.25);
 }
 body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg2);color:var(--text);-webkit-font-smoothing:antialiased;font-size:14.5px;line-height:1.5}
@@ -660,6 +660,11 @@ textarea.inp{min-height:100px;resize:vertical;line-height:1.55}
 .btn-secondary{background:var(--card2);border:1px solid var(--line);color:var(--text)}.btn-secondary:hover{background:var(--hover)}
 .btn-danger{color:var(--like);background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.15)}.btn-danger:hover{background:rgba(239,68,68,0.12)}
 .btn-block{width:100%}
+.btn-sm{padding:6px 12px;font-size:12.5px;border-radius:8px;gap:4px}
+.btn-xs{padding:4px 10px;font-size:12px;border-radius:7px;gap:3px}
+.btn-icon{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--text3);transition:.15s;background:none;border:none;cursor:pointer;flex-shrink:0}
+.btn-icon:hover{background:var(--hover);color:var(--text)}
+.btn-icon.danger:hover{background:rgba(239,68,68,0.08);color:var(--like)}
 
 .empty{text-align:center;padding:60px 20px;color:var(--text3)}
 .empty .ico{width:44px;height:44px;margin:0 auto 12px}
@@ -717,6 +722,12 @@ textarea.inp{min-height:100px;resize:vertical;line-height:1.55}
 </head>
 <body>
 <div id="root"><div class="loading"><div class="spinner"></div>불러오는 중</div></div>
+<div id="file-warn" style="display:none;position:fixed;bottom:16px;right:16px;background:#f59e0b;color:#fff;padding:10px 16px;border-radius:12px;font-size:13px;font-weight:600;z-index:9999;max-width:320px;box-shadow:0 4px 16px rgba(0,0,0,.2)">
+  &#9888;&#65039; <b>file://</b> 로 열면 Supabase 연결이 차단될 수 있어요.<br>
+  <span style="font-weight:400;font-size:12px">VSCode Live Server 또는 로컬 서버로 열어주세요.</span>
+  <button onclick="this.parentElement.style.display='none'" style="float:right;background:none;color:#fff;font-size:16px;line-height:1;margin-left:8px;cursor:pointer">x</button>
+</div>
+<script>if(location.protocol==='file:'){document.getElementById('file-warn').style.display='block';}</script>
 <div class="sel-toolbar" id="sel-toolbar"></div>
 
 <script type="module">
@@ -815,6 +826,98 @@ function saveSes(){try{S.me?localStorage.setItem('me',S.me):localStorage.removeI
 function applyTheme(){document.documentElement.setAttribute('data-theme',S.theme)}
 function toggleTheme(){S.theme=S.theme==='dark'?'light':'dark';applyTheme();saveSes();render()}
 
+// ═══ MODAL & TOAST ═══
+function modal(html){
+  document.getElementById('ov')?.remove();
+  const ov=document.createElement('div');
+  ov.id='ov';ov.className='overlay';
+  ov.innerHTML=`<div class="modal">${html}</div>`;
+  ov.addEventListener('mousedown',e=>{if(e.target===ov)closeM();});
+  document.body.appendChild(ov);
+  document.getElementById('root')?.classList.add('blurred');
+}
+function _setModalContent(html){
+  const m=document.querySelector('#ov .modal');
+  if(m)m.innerHTML=html;else modal(html);
+}
+function toast(msg,type=''){
+  const t=document.createElement('div');
+  t.style.cssText=`position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:${type==='error'?'var(--like)':type==='info'?'var(--accent)':'var(--text)'};color:#fff;padding:9px 18px;border-radius:12px;font-size:13.5px;font-weight:600;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,0.18);pointer-events:none;animation:pop .2s ease`;
+  t.textContent=msg;document.body.appendChild(t);
+  setTimeout(()=>t.style.opacity='0',2200);setTimeout(()=>t.remove(),2500);
+}
+
+// ═══ 새 숲 만들기 모달 ═══
+let nfStep=1,nfColor='#4a6cf7',nfEmoji='🎋',nfName='',newForestIcon='',newForestBanner='';
+const NF_TEMPLATES=[
+  {emoji:'🎋',name:'대나무숲'},{emoji:'🌸',name:'꽃마당'},{emoji:'🏫',name:'학교생활'},
+  {emoji:'🎮',name:'게임방'},{emoji:'📚',name:'공부방'},{emoji:'🎵',name:'음악실'},
+  {emoji:'🍕',name:'맛집공유'},{emoji:'✈️',name:'여행일기'},{emoji:'💡',name:'아이디어'},
+  {emoji:'🐾',name:'반려동물'},{emoji:'🌍',name:'환경이야기'},{emoji:'🏃',name:'운동클럽'},
+];
+const NF_PALETTE=['#4a6cf7','#8b5cf6','#ef4444','#f59e0b','#22c55e','#06b6d4','#ec4899','#64748b','#1a1b1e','#e2e3e8'];
+
+function _renderCreateForest(){
+  const step=nfStep;
+  const iconStyle=`width:72px;height:72px;border-radius:20px;display:flex;align-items:center;justify-content:center;font-size:36px;background:${nfColor}18;border:2px solid ${nfColor};margin:0 auto 8px;cursor:pointer;overflow:hidden`;
+  const iconEl=newForestIcon
+    ?`<div id="nf-icon-circle" style="${iconStyle}"><img id="nf-icon-img" src="${typeof newForestIcon==='string'?newForestIcon:URL.createObjectURL(newForestIcon)}" style="width:100%;height:100%;object-fit:cover;border-radius:18px"></div>`
+    :`<div id="nf-icon-circle" style="${iconStyle}" onclick="document.getElementById('nf-icon-inp').click()">${nfEmoji}</div>`;
+  const paletteHtml=NF_PALETTE.map(c=>`<div class="nf-palette-dot" data-color="${c}" onclick="pickNfColor('${c}')" style="width:26px;height:26px;border-radius:50%;background:${c};cursor:pointer;border:${c===nfColor?'3px solid var(--text)':'3px solid transparent'};transform:${c===nfColor?'scale(1.15)':'scale(1)'};transition:.15s"></div>`).join('');
+  const step1=`
+    <div style="text-align:center;margin-bottom:16px">
+      ${iconEl}
+      <input type="file" id="nf-icon-inp" accept="image/*" hidden onchange="previewForestIcon(this)">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:4px">아이콘 클릭해서 변경</div>
+    </div>
+    <div class="mfield"><label>이모지</label>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">${NF_TEMPLATES.map(t=>`<span onclick="pickNfTemplate('${t.emoji}','${t.name}')" style="font-size:22px;cursor:pointer;padding:4px 6px;border-radius:8px;transition:.1s;background:${nfEmoji===t.emoji?'var(--accent-soft)':'transparent'}">${t.emoji}</span>`).join('')}</div>
+    </div>
+    <div class="mfield"><label>숲 이름</label>
+      <input class="inp" id="nf-name" placeholder="우리 숲 이름은?" maxlength="20" value="${esc(nfName)}" oninput="nfName=this.value">
+    </div>
+    <div class="mfield"><label>색상</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        ${paletteHtml}
+        <div id="nf-color-swatch" onclick="openNfColorPicker()" style="width:26px;height:26px;border-radius:50%;background:${nfColor};cursor:pointer;border:2px solid var(--line2);position:relative" title="직접 선택">
+          <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px">🎨</span>
+        </div>
+      </div>
+    </div>
+    <button id="nf-make-btn" class="btn btn-primary btn-block" onclick="pickNfStep(2)" style="background:${nfColor}">다음 →</button>`;
+  const bannerPreview=newForestBanner
+    ?`<img src="${typeof newForestBanner==='string'?newForestBanner:URL.createObjectURL(newForestBanner)}" style="width:100%;height:80px;object-fit:cover;border-radius:10px;margin-bottom:8px">`
+    :`<div style="height:60px;border-radius:10px;background:linear-gradient(135deg,${nfColor},${nfColor}88);margin-bottom:8px;display:flex;align-items:center;justify-content:center;font-size:24px">${nfEmoji}</div>`;
+  const step2=`
+    <div class="mfield"><label>배너 이미지 (선택)</label>
+      ${bannerPreview}
+      <button class="btn btn-secondary" onclick="document.getElementById('nf-banner-inp').click()" style="width:100%;font-size:13px">배너 업로드</button>
+      <input type="file" id="nf-banner-inp" accept="image/*" hidden onchange="previewForestBanner(this)">
+    </div>
+    <div class="mfield"><label>한줄 소개 (선택)</label>
+      <input class="inp" id="nf-desc" placeholder="이 숲은 어떤 곳인가요?" maxlength="60">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-secondary" style="flex:1" onclick="pickNfStep(1)">← 이전</button>
+      <button id="nf-make-btn" class="btn btn-primary" style="flex:2;background:${nfColor}" onclick="createForest()">🌱 숲 만들기!</button>
+    </div>`;
+  const html=`
+    <div class="modal-head">
+      <div style="display:flex;gap:8px;align-items:center">
+        <h2>🌱 새 숲 만들기</h2>
+        <div style="display:flex;gap:4px">
+          <div style="width:20px;height:4px;border-radius:4px;background:${step>=1?nfColor:'var(--line)'}"></div>
+          <div style="width:20px;height:4px;border-radius:4px;background:${step>=2?nfColor:'var(--line)'}"></div>
+        </div>
+      </div>
+      <button class="modal-x" onclick="closeM()">${ic('x','sm')}</button>
+    </div>
+    <div class="modal-body">${step===1?step1:step2}</div>`;
+  _setModalContent(html);
+  // restore emoji2 display if exists
+  const em2=document.getElementById('nf-emoji2');if(em2)em2.textContent=nfEmoji;
+}
+
 function defAvatar(s){s=s||'?';const cols=[['#4a6cf7','#6366f1'],['#8b5cf6','#a855f7'],['#ef4444','#f97316'],['#22c55e','#14b8a6'],['#f59e0b','#eab308'],['#ec4899','#f43f5e'],['#06b6d4','#0ea5e9'],['#64748b','#475569']];let h=0;for(let i=0;i<s.length;i++)h=s.charCodeAt(i)+((h<<5)-h);const c=cols[Math.abs(h)%cols.length];return `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c[0]}"/><stop offset="1" stop-color="${c[1]}"/></linearGradient></defs><rect width="80" height="80" fill="url(#g)"/><text x="40" y="52" font-size="34" font-family="sans-serif" font-weight="700" fill="#fff" text-anchor="middle">${s[0]}</text></svg>`)}`}
 function anonNick(){const a=['조용한','용감한','느긋한','따뜻한','재빠른','상냥한','씩씩한','포근한','유쾌한','당당한'];const n=['판다','수달','여우','고양이','펭귄','다람쥐','부엉이','토끼','사슴','너구리'];return a[Math.random()*a.length|0]+n[Math.random()*n.length|0]+(Math.random()*90+10|0)}
 function ago(t){const d=Date.now()-new Date(t).getTime();if(d<6e4)return'방금';if(d<36e5)return(d/6e4|0)+'분 전';if(d<864e5)return(d/36e5|0)+'시간 전';if(d<6048e5)return(d/864e5|0)+'일 전';return new Date(t).toLocaleDateString('ko')}
@@ -829,28 +932,28 @@ function renderRich(h){return sanitize(h||'')}
 
 // ═══ DATA LOADING ═══
 async function loadAll(){
-  S.loading=true;
+  S.loading=true;render();
   try{
+    const safe=q=>q.then(r=>r).catch(()=>({data:[],error:null}));
     const [pf,po,cm,lk,fl,fr,fm,ch,cl,bm,rc,frq,dm,pv,notif,subs,blk]=await Promise.all([
-      sb.from('profiles').select('*'),
-      sb.from('posts').select('*').order('created_at',{ascending:false}),
-      sb.from('comments').select('*').order('created_at',{ascending:true}),
-      sb.from('likes').select('post_id,liker'),
-      sb.from('follows').select('follower,followee'),
-      sb.from('forests').select('*').order('created_at',{ascending:true}),
-      sb.from('forest_members').select('forest_id,nick,role'),
-      sb.from('channels').select('*').order('position',{ascending:true}),
-      sb.from('comment_likes').select('comment_id,liker'),
-      sb.from('bookmarks').select('post_id,nick'),
-      sb.from('reactions').select('post_id,reactor,emoji'),
-      sb.from('friend_requests').select('*'),
-      sb.from('direct_messages').select('*').order('created_at',{ascending:true}),
-      sb.from('poll_votes').select('*').then(r=>r).catch(()=>({data:[]})),
-      sb.from('notifications').select('*').order('created_at',{ascending:false}).then(r=>r).catch(()=>({data:[]})),
-      sb.from('post_subscriptions').select('*').then(r=>r).catch(()=>({data:[]})),
-      sb.from('blocked_users').select('*').then(r=>r).catch(()=>({data:[]})),
+      safe(sb.from('profiles').select('*')),
+      safe(sb.from('posts').select('*').order('created_at',{ascending:false})),
+      safe(sb.from('comments').select('*').order('created_at',{ascending:true})),
+      safe(sb.from('likes').select('post_id,liker')),
+      safe(sb.from('follows').select('follower,followee')),
+      safe(sb.from('forests').select('*').order('created_at',{ascending:true})),
+      safe(sb.from('forest_members').select('forest_id,nick,role')),
+      safe(sb.from('channels').select('*').order('position',{ascending:true})),
+      safe(sb.from('comment_likes').select('comment_id,liker')),
+      safe(sb.from('bookmarks').select('post_id,nick')),
+      safe(sb.from('reactions').select('post_id,reactor,emoji')),
+      safe(sb.from('friend_requests').select('*')),
+      safe(sb.from('direct_messages').select('*').order('created_at',{ascending:true})),
+      safe(sb.from('poll_votes').select('*')),
+      safe(sb.from('notifications').select('*').order('created_at',{ascending:false})),
+      safe(sb.from('post_subscriptions').select('*')),
+      safe(sb.from('blocked_users').select('*')),
     ]);
-    if(pf.error||po.error)throw pf.error||po.error;
     const me=whoAmI();
     S.users={};(pf.data||[]).forEach(u=>S.users[u.nick]={...u,followers:[],following:[],posts:0});
     (fl.data||[]).forEach(f=>{if(S.users[f.followee])S.users[f.followee].followers.push(f.follower);if(S.users[f.follower])S.users[f.follower].following.push(f.followee)});
@@ -892,13 +995,13 @@ async function loadAll(){
     // 기본 숲/채널 선택
     if(S.forest&&!S.forests[S.forest])S.forest=null;
     if(S.forest&&!S.channel){const chs=S.forests[S.forest]?.channels;if(chs?.length)S.channel=chs[0].id}
-  }catch(e){console.error(e);toast('DB 연결 실패 — SQL 먼저 실행해줘')}
-  S.loading=false;
-  // 마지막 접속 시간 업데이트
+  }catch(e){console.error('loadAll 오류:',e)}
+  finally{
+    S.loading=false;
+    if(!_rtChannel)initRealtime();
+    render();
+  }
   if(S.me)sb.from('profiles').update({last_seen:new Date().toISOString()}).eq('nick',S.me).then(()=>{}).catch(()=>{});
-  // Realtime 초기화 (처음 한 번만)
-  if(!_rtChannel)initRealtime();
-  render();
 }
 
 // ═══ RENDER ═══
@@ -1027,7 +1130,7 @@ function mainHead(title,desc,hasBack){
 
 // ═══ HOME VIEWS ═══
 function homeFeed(){
-  const ci=`<div style="margin-bottom:16px;display:flex;gap:10px;align-items:center;cursor:pointer;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 18px" onclick="openCompose()"><div class="av sm ${S.me?'':'anon'}">${S.me?`<img src="${avatarOf(S.me)}">`:`${ic('user','xs')}`}</div><span style="color:var(--text3);flex:1">무슨 생각을 하고 있나요?</span><span class="btn btn-primary" style="padding:7px 16px;font-size:13px">${ic('edit','xs')} 글쓰기</span></div>`;
+  const ci=`<div style="margin-bottom:16px;display:flex;gap:10px;align-items:center;cursor:pointer;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 18px" onclick="openCompose()"><div class="av sm ${S.me?'':'anon'}">${S.me?`<img src="${avatarOf(S.me)}">`:`${ic('user','xs')}`}</div><span style="color:var(--text3);flex:1">무슨 생각을 하고 있나요?</span><span class="btn btn-primary btn-sm">${ic('edit','xs')} 글쓰기</span></div>`;
   // 트렌딩 태그
   const trending=getTrendingTags();
   const trendHtml=trending.length?`<div class="trending-section"><h3>🏷️ 트렌딩 태그</h3><div class="tag-cloud">${trending.map(([t,c])=>`<span class="trend-tag" onclick="searchByTag('${escA(t)}')">#${esc(t)}<span class="cnt">${c}</span></span>`).join('')}</div></div>`:'';
@@ -1113,7 +1216,7 @@ function searchResults(){
   const showUsers=_tab==='전체'||_tab==='사용자';
   const showForests=_tab==='전체'||_tab==='숲';
   const showPosts=_tab==='전체'||_tab==='게시글';
-  if(showUsers&&users.length)html+=`<div style="margin-bottom:20px"><div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">사용자</div>${users.map(u=>`<div class="friend-item" onclick="goProfile('${u.nick}')"><div class="av"><img src="${avatarOf(u.nick)}"></div><div class="info"><div class="nm">${esc(u.nick)}</div><div class="activity">${esc(u.bio||'소개 없음')}</div></div><button class="btn btn-secondary" style="padding:5px 12px;font-size:12px" onclick="event.stopPropagation();openDM('${u.nick}')">메시지</button></div>`).join('')}</div>`;
+  if(showUsers&&users.length)html+=`<div style="margin-bottom:20px"><div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">사용자</div>${users.map(u=>`<div class="friend-item" onclick="goProfile('${u.nick}')"><div class="av"><img src="${avatarOf(u.nick)}"></div><div class="info"><div class="nm">${esc(u.nick)}</div><div class="activity">${esc(u.bio||'소개 없음')}</div></div><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openDM('${u.nick}')">메시지</button></div>`).join('')}</div>`;
   if(showForests&&forests.length){
     const fCards=forests.map(f=>{
       const joined=S.myForests.has(f.id);
@@ -1142,8 +1245,8 @@ function friendsView(){
   const pending=S.friendReqs;
   const friends=S.friends;
   let html='';
-  if(pending.length)html+=`<div style="margin-bottom:20px"><h3 style="font-size:15px;font-weight:700;margin-bottom:10px">📩 받은 친구 요청 (${pending.length})</h3>${pending.map(r=>`<div class="friend-item"><div class="av"><img src="${avatarOf(r.from_nick)}"></div><div class="info"><div class="nm">${esc(r.from_nick)}</div><div class="activity">친구 요청을 보냈어요</div></div><button class="btn btn-primary" style="padding:6px 14px;font-size:13px" onclick="acceptFriend(${r.id})">수락</button><button class="btn btn-secondary" style="padding:6px 14px;font-size:13px;margin-left:6px" onclick="rejectFriend(${r.id})">거절</button></div>`).join('')}</div>`;
-  if(friends.length)html+=`<h3 style="font-size:15px;font-weight:700;margin-bottom:10px">친구 (${friends.length})</h3>${friends.map(n=>{const u=S.users[n];return `<div class="friend-item" onclick="goProfile('${n}')"><div class="av"><img src="${avatarOf(n)}"></div><div class="info"><div class="nm">${esc(n)}</div><div class="activity">${u?esc(u.bio||u.status_text||'오프라인'):''}</div></div><button class="btn btn-secondary" style="padding:6px 12px;font-size:12px" onclick="event.stopPropagation();openDM('${n}')">메시지</button></div>`}).join('')}`;
+  if(pending.length)html+=`<div style="margin-bottom:20px"><h3 style="font-size:15px;font-weight:700;margin-bottom:10px">📩 받은 친구 요청 (${pending.length})</h3>${pending.map(r=>`<div class="friend-item"><div class="av"><img src="${avatarOf(r.from_nick)}"></div><div class="info"><div class="nm">${esc(r.from_nick)}</div><div class="activity">친구 요청을 보냈어요</div></div><button class="btn btn-primary btn-sm" onclick="acceptFriend(${r.id})">수락</button><button class="btn btn-secondary btn-sm" style="margin-left:6px" onclick="rejectFriend(${r.id})">거절</button></div>`).join('')}</div>`;
+  if(friends.length)html+=`<h3 style="font-size:15px;font-weight:700;margin-bottom:10px">친구 (${friends.length})</h3>${friends.map(n=>{const u=S.users[n];return `<div class="friend-item" onclick="goProfile('${n}')"><div class="av"><img src="${avatarOf(n)}"></div><div class="info"><div class="nm">${esc(n)}</div><div class="activity">${u?esc(u.bio||u.status_text||'오프라인'):''}</div></div><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openDM('${n}')">메시지</button></div>`}).join('')}`;
   if(!friends.length&&!pending.length)html=`<div class="empty">${ic('users')}<h3>아직 친구가 없어요</h3><p>다른 사람의 프로필에서 친구 요청을 보내보세요</p></div>`;
   return html;
 }
@@ -1277,10 +1380,91 @@ function findForestView(){
   </div>`;
 }
 
+
+// ═══ POST CARD ═══
+function pcard(p){
+  if(!p)return'';
+  const nick=p.author||p.anon_nick||'익명';
+  const liked=S.likes.has(p.id);
+  const bookmarked=S.bookmarks.has(p.id);
+  const likeCnt=S.likeCounts[p.id]||0;
+  const cmtCnt=(p.comments||[]).length;
+  const f=S.forests[p.forest_id];
+  const ch=S.channels[p.channel_id];
+
+  // 아바타
+  const avHtml=p.author
+    ?`<div class="av" onclick="event.stopPropagation();goProfile('${p.author}')"><img src="${avatarOf(p.author)}"></div>`
+    :`<div class="av anon">${ic('user','sm')}</div>`;
+
+  // 핀 배지
+  const pinBadge=p.pinned?`<span style="font-size:10px;background:var(--gold);color:#fff;padding:2px 7px;border-radius:6px;font-weight:700;margin-left:6px">${ic('pin','xs')} 고정</span>`:'';
+
+  // 숲·채널 태그
+  const forestTag=f?`<span style="font-size:11px;color:var(--text3)">${f.emoji} ${esc(f.name)}${ch?' · #'+esc(ch.name):''}</span>`:'';
+
+  // 이미지 썸네일
+  const imgs=p.imgs||[];
+  const imgHtml=imgs.length
+    ?`<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">${imgs.slice(0,4).map((img,i)=>`<img src="${img}" onclick="event.stopPropagation();viewImg('${img}')" style="width:${imgs.length===1?'100%':'calc(50% - 3px)'};max-height:${imgs.length===1?'280px':'140px'};object-fit:cover;border-radius:10px;cursor:pointer;display:block"${i===3&&imgs.length>4?` data-extra="+${imgs.length-4}"`:''}>`).join('')}</div>`
+    :'';
+
+  // 파일 첨부
+  const files=p.files||[];
+  const fileHtml=files.length
+    ?`<div class="pcard-files">${files.map(f2=>`<div class="pcard-file" onclick="event.stopPropagation();downloadFile('${esc(f2.name)}','${esc(f2.data)}')">${ic('file','xs')} ${esc(f2.name)}</div>`).join('')}</div>`
+    :'';
+
+  // 태그
+  const tags=(p.tags||[]);
+  const tagHtml=tags.length
+    ?`<div class="pcard-tags">${tags.map(t=>`<span class="tag" onclick="event.stopPropagation();searchByTag('${escA(t)}')">#${esc(t)}</span>`).join('')}</div>`
+    :'';
+
+  // 투표
+  const pollHtml=p.poll?renderPoll(p):'';
+
+  // 반응
+  const rxmap=S.reactions[p.id]||{};
+  const rxHtml=Object.entries(rxmap).map(([em,cnt])=>`<span class="rx-chip ${S.myReactions.has(p.id+'|'+em)?'my':''}" onclick="event.stopPropagation();toggleReaction(${p.id},'${em}')">${em} ${cnt}</span>`).join('');
+  const rxRow=rxHtml?`<div class="rx-row" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">${rxHtml}</div>`:'';
+
+  // 비공개 배지
+  const visBadge=p.visibility==='private'?`<span style="font-size:10px;background:var(--card3);color:var(--text3);padding:2px 6px;border-radius:6px;margin-left:4px">${ic('lock','xs')} 비공개</span>`
+    :p.visibility==='followers'?`<span style="font-size:10px;background:var(--card3);color:var(--text3);padding:2px 6px;border-radius:6px;margin-left:4px">${ic('users','xs')} 팔로워</span>`:'';
+
+  return `<div class="pcard" onclick="openDetail(${p.id})">
+    <div class="pcard-top">
+      ${avHtml}
+      <div class="pcard-who">
+        <div class="pcard-name">${esc(nick)} ${p.author?getLvBadge(p.author):''}${visBadge}${pinBadge}</div>
+        <div class="pcard-time">${ago(p.created_at)}${forestTag?' · ':' '}${forestTag}</div>
+      </div>
+      <button onclick="event.stopPropagation();share(${p.id})" style="color:var(--text3);width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;transition:.15s" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''">${ic('share','xs')}</button>
+    </div>
+    ${p.title?`<div class="pcard-title">${esc(p.title)}${cmtCnt?`<span class="cmt-cnt">[${cmtCnt}]</span>`:''}</div>`:''}
+    <div class="pcard-preview">${plainText(p.content||'')}</div>
+    ${imgHtml}${fileHtml}${tagHtml}${pollHtml}${rxRow}
+    <div class="pcard-foot">
+      <span class="act ${liked?'liked':''}" onclick="event.stopPropagation();like(${p.id})">${ic('heart','sm')} ${likeCnt}</span>
+      <span class="act" onclick="openDetail(${p.id})">${ic('comment','sm')} ${cmtCnt}</span>
+      <span class="spacer"></span>
+      <span style="font-size:12px;color:var(--text3);display:flex;align-items:center;gap:3px">${ic('eye','xs')} ${p.views||0}</span>
+      <div style="position:relative">
+        <button onclick="event.stopPropagation();toggleReactPop(${p.id})" style="font-size:16px;width:30px;height:30px;border-radius:8px;transition:.15s" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''">😊</button>
+        <div id="rp-${p.id}" class="react-pop hidden">
+          ${['👍','❤️','😂','😮','🔥','🎉','😢','👏'].map(em=>`<button onclick="event.stopPropagation();toggleReaction(${p.id},'${em}');toggleReactPop(${p.id})">${em}</button>`).join('')}
+        </div>
+      </div>
+      <button class="act ${bookmarked?'liked':''}" onclick="event.stopPropagation();toggleBookmark(${p.id})">${ic('bookmark',bookmarked?'sm fill':'sm')}</button>
+      ${p.author===S.me?`<button class="btn-icon" onclick="event.stopPropagation();openEdit(${p.id})">${ic('edit','xs')}</button><button class="btn-icon danger" onclick="event.stopPropagation();if(confirm('삭제?'))delPost(${p.id})">${ic('trash','xs')}</button>`:''}
+    </div>
+  </div>`;
+}
 // ═══ CHANNEL FEED ═══
 function channelFeed(ch){
   const posts=S.posts.filter(p=>p.channel_id===ch.id&&!(p.title||'').startsWith('reply:'));
-  const ci=`<div style="margin-bottom:14px;display:flex;gap:10px;align-items:center;cursor:text;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 16px" onclick="openCompose()"><div class="av sm ${S.me?'':'anon'}">${S.me?`<img src="${avatarOf(S.me)}">`:`${ic('user','xs')}`}</div><span style="color:var(--text3);flex:1">이 채널에 글을 남겨보세요...</span><span class="btn btn-primary" style="padding:6px 14px;font-size:13px">게시</span></div>`;
+  const ci=`<div style="margin-bottom:14px;display:flex;gap:10px;align-items:center;cursor:text;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 16px" onclick="openCompose()"><div class="av sm ${S.me?'':'anon'}">${S.me?`<img src="${avatarOf(S.me)}">`:`${ic('user','xs')}`}</div><span style="color:var(--text3);flex:1">이 채널에 글을 남겨보세요...</span><span class="btn btn-primary btn-sm">게시</span></div>`;
   const list=posts.length?posts.map(p=>pcard(p)).join(''):`<div class="empty">${ic('edit')}<h3>아직 글이 없어요</h3><p>첫 글을 남겨보세요!</p></div>`;
   return ci+list;
 }
@@ -1444,8 +1628,8 @@ async function openGifPop(chId){
     <div style="display:flex;gap:6px;padding:8px 12px;overflow-x:auto;flex-shrink:0;border-bottom:1px solid var(--line);scrollbar-width:none">
       ${cats.map((c,i)=>`<button onclick="document.getElementById('gif-search').value='';searchGif('${c.replace(/[🔥😂🥺😎🎉😢😡🐱🐶]/u,'').trim()}')" style="padding:5px 12px;border-radius:20px;font-size:12.5px;font-weight:600;white-space:nowrap;background:${i===0?'var(--accent)':'var(--card2)'};color:${i===0?'#fff':'var(--text2)'};border:none;cursor:pointer;flex-shrink:0">${c}</button>`).join('')}
     </div>
-    <div id="gif-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:8px;overflow-y:auto;flex:1">
-      <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text3)">불러오는 중...</div>
+    <div id="gif-grid" style="columns:2;column-gap:6px;padding:8px;overflow-y:auto;flex:1">
+      <div style="text-align:center;padding:20px;color:var(--text3)">불러오는 중...</div>
     </div>`;
   document.body.appendChild(pop);
   const ov=document.createElement('div');ov.id='gif-ov';ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1999;backdrop-filter:blur(2px)';ov.onclick=()=>{pop.remove();ov.remove()};document.body.appendChild(ov);
@@ -1461,7 +1645,7 @@ function gifSearchDebounce(q){
 async function searchGif(q){
   _gifQuery=q;
   const grid=document.getElementById('gif-grid');if(!grid)return;
-  grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text3)">🔍 로딩 중...</div>`;
+  grid.innerHTML=`<div style="text-align:center;padding:20px;color:var(--text3)">🔍 로딩 중...</div>`;
   try{
     const isTrending=!q||q==='trending'||q==='🔥인기';
     // Tenor v1 - API 키 불필요
@@ -1473,20 +1657,20 @@ async function searchGif(q){
     const data=await res.json();
     const results=data.results||[];
     if(!results.length){
-      grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text3)">😢 결과가 없어요</div>`;
+      grid.innerHTML=`<div style="text-align:center;padding:20px;color:var(--text3)">😢 결과가 없어요</div>`;
       return;
     }
     grid.innerHTML=results.map(r=>{
-      // v1은 media[0].tinygif.url
       const media=r.media?.[0];
       const gifUrl=media?.tinygif?.url||media?.gif?.url||'';
       if(!gifUrl)return '';
       const safe=gifUrl.replace(/'/g,'%27');
-      return `<div onclick="sendGif('${safe}')" style="cursor:pointer;border-radius:8px;overflow:hidden;aspect-ratio:1;background:var(--card2);transition:transform .15s" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform=''"><img src="${gifUrl}" style="width:100%;height:100%;object-fit:cover" loading="lazy"></div>`;
+      // 각 GIF가 자연스러운 비율로 표시되도록 (masonry 효과)
+      return `<div onclick="sendGif('${safe}')" style="cursor:pointer;border-radius:10px;overflow:hidden;background:var(--card2);transition:transform .15s,opacity .15s;margin-bottom:6px;break-inside:avoid;display:block" onmouseover="this.style.transform='scale(1.03)';this.style.opacity='0.9'" onmouseout="this.style.transform='';this.style.opacity='1'"><img src="${gifUrl}" style="width:100%;display:block;border-radius:10px" loading="lazy"></div>`;
     }).join('');
   }catch(e){
     console.error('GIF 에러:',e);
-    grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text3)">😥 불러오기 실패<br><small>${e.message}</small></div>`;
+    grid.innerHTML=`<div style="text-align:center;padding:20px;color:var(--text3)">😥 불러오기 실패<br><small>${e.message}</small></div>`;
   }
 }
 window.gifSearchDebounce=gifSearchDebounce;
@@ -1653,15 +1837,11 @@ async function saveProfile(){
 }
 function previewForestIcon(inp){
   const f=inp.files[0];if(!f)return;newForestIcon=f;
-  const url=URL.createObjectURL(f);
-  const el=document.getElementById('nf-icon-preview');
-  if(el)el.innerHTML=`<img src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+  _renderCreateForest();
 }
 function previewForestBanner(inp){
   const f=inp.files[0];if(!f)return;newForestBanner=f;
-  const url=URL.createObjectURL(f);
-  const el=document.getElementById('nf-banner-preview');
-  if(el){el.innerHTML='';el.style.background=`url(${url}) center/cover`;}
+  _renderCreateForest();
 }
 function previewEditIcon(inp){
   const f=inp.files[0];if(!f)return;editForestIcon=f;
@@ -1717,6 +1897,47 @@ async function uploadPostImages(){
 window.uploadToStorage=uploadToStorage;window.uploadPostImages=uploadPostImages;
 
 let pImgs=[],pFiles=[],composeForestId='free',composeChId=null;
+let editForestIcon='',editForestBanner='';
+let _rtChannel=null;
+let _onlineUsers=new Set();
+
+// ═══ REALTIME (Supabase) ═══
+function initRealtime(){
+  try{
+    _rtChannel=sb.channel('public-changes')
+      .on('postgres_changes',{event:'*',schema:'public'},()=>{loadAll()})
+      .subscribe();
+    // Presence: 로그인 유저만 트래킹
+    if(S.me){
+      const presenceCh=sb.channel('presence-room');
+      presenceCh
+        .on('presence',{event:'sync'},()=>{
+          const state=presenceCh.presenceState();
+          _onlineUsers=new Set(Object.values(state).flat().map(p=>p.nick).filter(Boolean));
+          render();
+        })
+        .subscribe(async status=>{
+          if(status==='SUBSCRIBED'){
+            await presenceCh.track({nick:S.me,online_at:new Date().toISOString()});
+          }
+        });
+    }
+  }catch(e){console.warn('Realtime 초기화 실패:',e);}
+}
+
+// ═══ 레벨 배지 ═══
+function getLvBadge(nick){
+  if(!nick)return'';
+  const u=S.users[nick];
+  const posts=(u&&u.posts)||0;
+  let lv,color,label;
+  if(posts>=100){lv=5;color='#f59e0b';label='🏆 전설'}
+  else if(posts>=50){lv=4;color='#8b5cf6';label='💎 다이아'}
+  else if(posts>=20){lv=3;color='#4a6cf7';label='🥇 골드'}
+  else if(posts>=5){lv=2;color='#22c55e';label='🥈 실버'}
+  else{return''}
+  return '<span style="font-size:10px;font-weight:700;color:'+color+';background:'+color+'18;padding:1px 6px;border-radius:8px;margin-left:3px">'+label+'</span>';
+}
 function drawPreview(){
   const el=document.getElementById('c-preview');if(!el)return;
   el.innerHTML=pImgs.map((item,i)=>{
@@ -1848,7 +2069,8 @@ function authTab(tab){
         <label>닉네임 <span style="font-size:11px;color:var(--text3)">글에 표시되는 이름</span></label>
         <input class="inp" id="auth-nick" placeholder="2~12글자" maxlength="12">
       </div>
-      <div class="mfield"><label>비밀번호</label><input class="inp" type="password" id="auth-pw" placeholder="6자 이상"></div>
+      <div class="mfield"><label>이메일</label><input class="inp" type="email" id="auth-email" placeholder="본인 이메일 주소" maxlength="100" onkeydown="if(event.key==='Enter')doAuth('signup')"></div>
+      <div class="mfield"><label>비밀번호</label><input class="inp" type="password" id="auth-pw" placeholder="6자 이상" onkeydown="if(event.key==='Enter')doAuth('signup')"></div>
       <button class="btn btn-primary btn-block" onclick="doAuth('signup')">가입하기</button>`;
   }
   setTimeout(()=>document.getElementById('auth-nick')?.focus(),50);
@@ -1873,7 +2095,9 @@ async function doAuth(type){
     const classN=parseInt(document.getElementById('auth-class')?.value||'0');
     const numN=parseInt(document.getElementById('auth-num')?.value||'0');
     const name=document.getElementById('auth-name')?.value.trim();
-    if(!code||!classN||!numN||!name||!nick||!pw){toast('모든 항목을 입력하세요');return}
+    const email=(document.getElementById('auth-email')?.value.trim()||'');
+    if(!code||!classN||!numN||!name||!nick||!email||!pw){toast('모든 항목을 입력하세요');return}
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('이메일 형식이 올바르지 않아요');return}
     if(pw.length<6){toast('비밀번호는 6자 이상이에요');return}
     if(nick.length<2){toast('닉네임은 2글자 이상이에요');return}
     if(classN<1||classN>6||numN<1||numN>40){toast('반/번호를 확인하세요');return}
@@ -1893,7 +2117,6 @@ async function doAuth(type){
 
     try{
       // Supabase Auth 계정 생성
-      const email=`${nick}@hapseong.local`;
       const {data:authData,error:authErr}=await sb.auth.signUp({email,password:pw});
       if(authErr)throw authErr;
       const uid=authData.user?.id;
@@ -1907,7 +2130,9 @@ async function doAuth(type){
       });
 
       S.me=nick;localStorage.setItem('me',nick);
-      closeM();toast(`${classN}반 ${numN}번 ${name}님, 환영해요! 🎋`);await loadAll();
+      closeM();toast(`${classN}반 ${numN}번 ${name}님, 환영해요! 🎋`);
+      S.subview='feed';S.forest=null;S.channel=null;
+      await loadAll();
     }catch(e){toast('가입 실패: '+e.message)}
   }
 }
@@ -2003,8 +2228,8 @@ function toggleMsgReactPop(event,msgId){
   setTimeout(()=>document.addEventListener('click',()=>pop?.remove(),{once:true}),50);
 }
 
-async function addCmt(pid){const inp=document.getElementById('ci-'+pid);if(!inp||!inp.value.trim())return;const content=esc(inp.value.trim());inp.value='';try{await sb.from('comments').insert({post_id:pid,author:S.me,anon_nick:S.me?null:anonNick(),content});await loadAll()}catch(e){toast('댓글 실패')}}
-async function addReply(pid,parentId){const inp=document.getElementById('ri-'+parentId);if(!inp||!inp.value.trim())return;const content=esc(inp.value.trim());inp.value='';try{await sb.from('comments').insert({post_id:pid,parent_id:parentId,author:S.me,anon_nick:S.me?null:anonNick(),content});await loadAll()}catch(e){toast('답글 실패')}}
+async function addCmt(pid){const inp=document.getElementById('ci-'+pid);if(!inp||!inp.value.trim())return;const content=inp.value.trim();inp.value='';try{await sb.from('comments').insert({post_id:pid,author:S.me||null,anon_nick:S.me?null:anonNick(),content});await loadAll()}catch(e){toast('댓글 실패: '+e.message)}}
+async function addReply(pid,parentId){const inp=document.getElementById('ri-'+parentId);if(!inp||!inp.value.trim())return;const content=inp.value.trim();inp.value='';try{await sb.from('comments').insert({post_id:pid,parent_id:parentId,author:S.me||null,anon_nick:S.me?null:anonNick(),content});await loadAll()}catch(e){toast('답글 실패: '+e.message)}}
 async function toggleJoin(id){if(!S.me){toast('로그인 필요');openAuth();return}const joined=S.myForests.has(id);try{if(joined)await sb.from('forest_members').delete().eq('forest_id',id).eq('nick',S.me);else await sb.from('forest_members').insert({forest_id:id,nick:S.me});toast(joined?'탈퇴됨':'가입했어요!');await loadAll()}catch(e){toast('실패')}}
 async function sendFriendReq(nick){if(!S.me){openAuth();return}try{await sb.from('friend_requests').insert({from_nick:S.me,to_nick:nick});toast('친구 요청을 보냈어요!');await loadAll()}catch(e){toast('이미 보냈거나 실패')}}
 async function acceptFriend(id){try{await sb.from('friend_requests').update({status:'accepted'}).eq('id',id);toast('친구가 되었어요!');await loadAll()}catch(e){toast('실패')}}
@@ -2161,6 +2386,7 @@ function openCompose(){
 function openCreateForest(){
   if(!S.me){toast('로그인 필요');openAuth();return}
   newForestIcon='';newForestBanner='';nfStep=1;nfColor='#4a6cf7';nfEmoji='🎋';nfName='';
+  modal('<div class="modal-body" style="text-align:center;padding:40px"><div style="font-size:32px;margin-bottom:8px">🌱</div><div style="color:var(--text3)">준비 중...</div></div>');
   _renderCreateForest();
 }
 function openNfColorPicker(){
@@ -2312,14 +2538,241 @@ function renderChDD(){
   menu.innerHTML=chs.length?chs.map(c=>`<div class="dd-opt ${c.id===composeChId?'on':''}" onclick="pickComposeCh(${c.id})"># ${esc(c.name)}</div>`).join(''):'<div style="padding:12px;font-size:13px;color:var(--text3)">채널이 없어요. 숲 설정에서 추가하세요.</div>';
 }
 
+// ═══ 누락 변수 선언 ═══
+let pendingAv=null,pendingBanner=null;
+
+// ═══ 모바일 하단 네비바 ═══
+function mobBar(){
+  const items=[
+    {icon:'home',label:'홈',action:"goHome()"},
+    {icon:'compass',label:'탐색',action:"openFindForest()"},
+    {icon:'edit',label:'글쓰기',action:"openCompose()"},
+    {icon:'bell',label:'알림',action:"toggleNotifPanel()"},
+    {icon:'user',label:'프로필',action:S.me?`goProfile('${S.me}')`:"openAuth()"},
+  ];
+  return `<div class="mob-bar">${items.map(it=>`<button onclick="${it.action}">${ic(it.icon,'sm')}<span>${it.label}</span></button>`).join('')}</div>`;
+}
+
+// ═══ 트렌딩 태그 ═══
+function getTrendingTags(){
+  const tagMap={};
+  S.posts.forEach(p=>(p.tags||[]).forEach(t=>{tagMap[t]=(tagMap[t]||0)+1}));
+  return Object.entries(tagMap).sort((a,b)=>b[1]-a[1]).slice(0,10);
+}
+
+// ═══ 주간 TOP ═══
+function getWeeklyTop(){
+  const weekAgo=Date.now()-7*24*60*60*1000;
+  return S.posts
+    .filter(p=>{
+      const ch=S.channels[p.channel_id];
+      if(ch&&ch.type==='chat')return false;
+      if((p.title||'').startsWith('reply:'))return false;
+      return new Date(p.created_at).getTime()>weekAgo;
+    })
+    .sort((a,b)=>((S.likeCounts[b.id]||0)+(b.comments||[]).length)-((S.likeCounts[a.id]||0)+(a.comments||[]).length))
+    .slice(0,5);
+}
+
+// ═══ 게시글 상세 ═══
+function detailView(){
+  const p=S.posts.find(x=>x.id===S.target);
+  if(!p)return`<div class="empty">${ic('edit')}<h3>글을 찾을 수 없어요</h3></div>`;
+  const nick=p.author||p.anon_nick||'익명';
+  const f=S.forests[p.forest_id];
+  const liked=S.likes.has(p.id);
+  const bookmarked=S.bookmarks.has(p.id);
+  const likeCnt=S.likeCounts[p.id]||0;
+  const subscribed=S.postSubscriptions.has(p.id);
+  const avHtml=p.author
+    ?`<div class="av" onclick="goProfile('${p.author}')"><img src="${avatarOf(p.author)}"></div>`
+    :`<div class="av anon">${ic('user','sm')}</div>`;
+
+  // 이미지
+  const imgs=p.imgs||[];
+  const imgHtml=imgs.length
+    ?`<div class="post-imgs n${Math.min(imgs.length,4)}" style="margin:12px 0">${imgs.map(img=>`<img src="${img}" onclick="viewImg('${img}')">`).join('')}</div>`
+    :'';
+
+  // 파일
+  const files=p.files||[];
+  const fileHtml=files.length
+    ?`<div class="pcard-files" style="margin:8px 0">${files.map(f2=>`<div class="pcard-file" onclick="downloadFile('${esc(f2.name)}','${esc(f2.data||'')}')">${ic('file','xs')} ${esc(f2.name)}</div>`).join('')}</div>`
+    :'';
+
+  // 태그
+  const tagHtml=(p.tags||[]).length
+    ?`<div class="pcard-tags">${(p.tags||[]).map(t=>`<span class="tag" onclick="searchByTag('${escA(t)}')">#${esc(t)}</span>`).join('')}</div>`
+    :'';
+
+  // 투표
+  const pollHtml=p.poll?renderPoll(p):'';
+
+  // 반응
+  const rxmap=S.reactions[p.id]||{};
+  const rxRow=Object.entries(rxmap).length
+    ?`<div class="reactions">${Object.entries(rxmap).map(([em,cnt])=>`<span class="reaction ${S.myReactions.has(p.id+'|'+em)?'on':''}" onclick="toggleReaction(${p.id},'${em}')">${em} <span>${cnt}</span></span>`).join('')}<div class="react-add" onclick="toggleReactPop(${p.id})">😊<div id="rp-${p.id}" class="react-pop hidden">${['👍','❤️','😂','😮','🔥','🎉','😢','👏'].map(em=>`<button onclick="event.stopPropagation();toggleReaction(${p.id},'${em}');toggleReactPop(${p.id})">${em}</button>`).join('')}</div></div></div>`
+    :`<div style="margin-bottom:14px"><div class="react-add" style="width:auto;padding:0 12px;gap:6px" onclick="toggleReactPop(${p.id})">😊 반응 추가<div id="rp-${p.id}" class="react-pop hidden">${['👍','❤️','😂','😮','🔥','🎉','😢','👏'].map(em=>`<button onclick="event.stopPropagation();toggleReaction(${p.id},'${em}');toggleReactPop(${p.id})">${em}</button>`).join('')}</div></div></div>`;
+
+  // 댓글
+  const cmts=(p.comments||[]).filter(c=>!c.parent_id);
+  const renderCmt=(c,isReply=false)=>{
+    const cnick=c.author||c.anon_nick||'익명';
+    const cLiked=S.cmtLikes.has(c.id);
+    const cLikeCnt=S.cmtLikeCounts[c.id]||0;
+    const replies=(p.comments||[]).filter(r=>r.parent_id===c.id);
+    return `<div class="cmt ${isReply?'':''}">
+      ${c.author?`<div class="av sm" onclick="goProfile('${c.author}')"><img src="${avatarOf(c.author)}"></div>`:`<div class="av sm anon">${ic('user','xs')}</div>`}
+      <div class="cmt-col">
+        <div class="cmt-head"><span class="cmt-nm" ${c.author?`onclick="goProfile('${c.author}')"`:''}>${esc(cnick)}</span>${c.author?getLvBadge(c.author):''}<span class="cmt-time">${ago(c.created_at)}</span></div>
+        <div class="cmt-txt">${parseMentions(renderRich(c.content))}</div>
+        <div class="cmt-actions">
+          <span class="cmt-act ${cLiked?'liked':''}" onclick="likeCmt(${c.id})">${ic('heart','xs')} ${cLikeCnt}</span>
+          ${!isReply?`<span class="cmt-act" onclick="toggleReply(${c.id})">${ic('comment','xs')} 답글</span>`:''}
+          ${c.author===S.me?`<span class="cmt-act" style="color:var(--like)" onclick="if(confirm('삭제?'))sb.from('comments').delete().eq('id',${c.id}).then(()=>loadAll())">삭제</span>`:''}
+        </div>
+        ${!isReply?`<div id="rb-${c.id}" class="hidden" style="margin-top:8px;padding-left:8px;border-left:2px solid var(--line)"><div class="cmt-replies">${replies.map(r=>renderCmt(r,true)).join('')}</div><div class="cmt-write" style="margin-top:8px"><div class="av sm ${S.me?'':'anon'}">${S.me?`<img src="${avatarOf(S.me)}">`:`${ic('user','xs')}`}</div><input class="inp" id="ri-${c.id}" placeholder="@${esc(cnick)}에게 답글..." onkeydown="if(event.key==='Enter')addReply(${p.id},${c.id})"><button class="cmt-send" onclick="addReply(${p.id},${c.id})">${ic('send','xs')}</button></div></div>`:''}
+      </div>
+    </div>`;
+  };
+
+  return `
+    <div class="detail">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        ${avHtml}
+        <div>
+          <div style="font-weight:600;font-size:13.5px">${esc(nick)} ${p.author?getLvBadge(p.author):''}</div>
+          <div style="font-size:12px;color:var(--text3)">${ago(p.created_at)}${f?' · '+esc(f.emoji+' '+f.name):''}</div>
+        </div>
+        ${p.author===S.me?`<div style="margin-left:auto;display:flex;align-items:center;gap:6px"><button onclick="openEdit(${p.id})" class="btn btn-secondary btn-sm">${ic('edit','xs')} 수정</button><button onclick="if(confirm('삭제?'))delPost(${p.id})" class="btn btn-danger btn-sm">${ic('trash','xs')} 삭제</button></div>`:''}
+      </div>
+      ${p.title?`<div class="detail-title">${esc(p.title)}</div>`:''}
+      <div class="detail-body">${parseMentions(renderRich(p.content||''))}</div>
+      ${imgHtml}${fileHtml}${tagHtml}${pollHtml}
+      <div class="detail-meta">
+        <span>${ic('eye','xs')} ${p.views||0}회</span>
+        <span>${ic('heart','xs')} ${likeCnt}</span>
+        <span>${ic('comment','xs')} ${(p.comments||[]).length}</span>
+      </div>
+      <div class="detail-acts">
+        <button class="d-act ${liked?'liked':''}" onclick="like(${p.id})">${ic('heart','sm')} ${liked?'좋아요 취소':'좋아요'} ${likeCnt}</button>
+        <button class="d-act ${bookmarked?'bookmarked':''}" onclick="toggleBookmark(${p.id})">${ic('bookmark','sm')} ${bookmarked?'저장됨':'저장'}</button>
+        <button class="d-act ${subscribed?'bookmarked':''}" onclick="toggleSubscribe(${p.id})">${ic('bell','sm')} ${subscribed?'구독 중':'구독'}</button>
+        <button class="d-act" onclick="share(${p.id})">${ic('share','sm')} 공유</button>
+        ${!p.author||p.author!==S.me?`<button class="d-act" onclick="reportPost(${p.id})" style="color:var(--text3)">${ic('eye','xs')} 신고</button>`:''}
+      </div>
+      ${rxRow}
+    </div>
+    <div class="detail" id="cmt-sec">
+      <div class="cmt-title">댓글 <span>${(p.comments||[]).length}</span></div>
+      ${cmts.map(c=>renderCmt(c)).join('')}
+      <div class="cmt-write" style="margin-top:16px">
+        <div class="av sm ${S.me?'':'anon'}">${S.me?`<img src="${avatarOf(S.me)}">`:`${ic('user','xs')}`}</div>
+        <input class="inp" id="ci-${p.id}" placeholder="${S.me?'댓글을 남겨보세요...':'익명으로 댓글 남기기'}" onkeydown="if(event.key==='Enter')addCmt(${p.id})">
+        <button class="cmt-send" onclick="addCmt(${p.id})">${ic('send','xs')}</button>
+      </div>
+    </div>`;
+}
+
+// ═══ 프로필 뷰 ═══
+function profileView(){
+  const nick=S.target;
+  const u=S.users[nick];
+  if(!u){
+    // 아직 로딩 중이거나 없는 유저
+    if(S.loading)return`<div class="empty"><div class="spinner" style="margin:0 auto 12px"></div><p>불러오는 중...</p></div>`;
+    return`<div class="empty">${ic('user')}<h3>유저를 찾을 수 없어요</h3><p style="margin-top:8px;font-size:13px">아직 프로필이 생성되지 않았을 수 있어요</p></div>`;
+  }
+  const isMe=nick===S.me;
+  const isFollowing=S.users[S.me]?.following?.includes(nick);
+  const isFriend=S.friends.includes(nick);
+  const isBlocked=S.blockedUsers.has(nick);
+  const bannerBg=u.banner?`url(${u.banner}) center/cover`:`linear-gradient(135deg,${['#4a6cf7','#8b5cf6','#ef4444','#22c55e','#f59e0b'][Math.abs((nick||'').charCodeAt(0))%5]}cc,#00000055)`;
+  const posts=S.posts.filter(p=>p.author===nick&&!((p.title||'').startsWith('reply:'))&&!(S.channels[p.channel_id]?.type==='chat'));
+  const userForests=Object.values(S.forests).filter(f=>S.myForests.has(f.id)&&f.owner!==nick); // 가입한 숲
+
+  const actionBtns=isMe
+    ?`<button class="btn btn-primary" onclick="openEditProfile()">${ic('edit','xs')} 프로필 편집</button>`
+    :`<div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="openDM('${nick}')">${ic('msgCircle','xs')} 메시지</button>
+        <button class="btn btn-secondary" onclick="follow('${nick}')">${isFollowing?ic('check','xs')+' 팔로잉':ic('userPlus','xs')+' 팔로우'}</button>
+        ${!isFriend?`<button class="btn btn-secondary" onclick="sendFriendReq('${nick}')">${ic('userPlus','xs')} 친구 요청</button>`:'<span style="padding:7px 14px;font-size:13px;color:var(--green);font-weight:600">👥 친구</span>'}
+        ${!isBlocked?`<button class="btn" style="color:var(--text3)" onclick="blockUser('${nick}')">차단</button>`:`<button class="btn" style="color:var(--like)" onclick="unblockUser('${nick}')">차단 해제</button>`}
+        <button class="btn" style="color:var(--text3)" onclick="reportUser('${nick}')">${ic('eye','xs')}</button>
+      </div>`;
+
+  const lvBadge=getLvBadge(nick);
+  const joinedForestsHtml=Object.values(S.forests).filter(f=>{const role=(S.memberRoles[f.id]||{})[nick];return role||f.owner===nick}).slice(0,6).map(f=>`<div class="prof-forest" onclick="goForest('${f.id}')">${f.emoji} ${esc(f.name)}</div>`).join('');
+
+  return `
+    <div class="prof">
+      <div class="prof-banner" style="background:${bannerBg}"><div class="fade"></div></div>
+      <div class="prof-body">
+        <div class="prof-row">
+          <div class="prof-av"><img src="${avatarOf(nick)}"></div>
+        </div>
+        <div class="prof-name">${esc(nick)} ${lvBadge}</div>
+        <div class="prof-handle">@${esc(nick)}</div>
+        ${u.bio?`<div class="prof-bio">${esc(u.bio)}</div>`:''}
+        <div style="margin-top:12px;margin-bottom:4px">${actionBtns}</div>
+        <div class="prof-stats">
+          <div class="prof-stat"><div class="n">${posts.length}</div><div class="l">게시물</div></div>
+          <div class="prof-stat"><div class="n">${(u.followers||[]).length}</div><div class="l">팔로워</div></div>
+          <div class="prof-stat"><div class="n">${(u.following||[]).length}</div><div class="l">팔로잉</div></div>
+        </div>
+        ${joinedForestsHtml?`<div class="prof-forests">${joinedForestsHtml}</div>`:''}
+      </div>
+    </div>
+    ${posts.length?posts.slice(0,20).map(p=>pcard(p)).join(''):`<div class="empty">${ic('edit')}<h3>아직 글이 없어요</h3></div>`}`;
+}
+
+// ═══ 타이핑 인디케이터 브로드캐스트 (stub) ═══
+function broadcastTyping(){
+  // Supabase Presence 연동 시 구현 가능 — 현재는 조용히 패스
+}
+
+// ═══ 숲 설정 색상 선택기 ═══
+function fsPick(color, event){
+  if(event)event.stopPropagation();
+  document.getElementById('fs-color').value=color;
+  const preview=document.getElementById('fs-color-preview');
+  if(preview)preview.style.background=color;
+  document.querySelectorAll('.cswatch').forEach(el=>{
+    const c=el.style.background||el.dataset?.color;
+    el.style.outline=c===color?'3px solid var(--text)':'2px solid transparent';
+  });
+}
+function openFsColorPicker(){
+  const inp=document.getElementById('fs-color');
+  const preview=document.getElementById('fs-color-preview');
+  if(!inp)return;
+  const swatch=preview||inp;
+  const rect=swatch.getBoundingClientRect();
+  if(document.getElementById('fs-cpicker'))return;
+  const pop=document.createElement('div');pop.id='fs-cpicker';
+  pop.style.cssText=`position:fixed;z-index:9999;background:var(--card);border:1px solid var(--line2);border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.18);padding:14px;width:240px;top:${Math.min(rect.bottom+8,window.innerHeight-300)}px;left:${Math.min(rect.left,window.innerWidth-250)}px;user-select:none`;
+  const palette=['#4a6cf7','#8b5cf6','#ef4444','#f59e0b','#22c55e','#06b6d4','#ec4899','#f97316','#14b8a6','#6366f1','#a855f7','#64748b'];
+  pop.innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">${palette.map(c=>`<div onclick="fsPick('${c}');document.getElementById('fs-cpicker')?.remove()" style="width:28px;height:28px;border-radius:8px;background:${c};cursor:pointer;border:2px solid ${c===(inp.value||'#4a6cf7')?'var(--text)':'transparent'}"></div>`).join('')}</div>
+  <div style="display:flex;align-items:center;gap:6px"><span style="font-size:12px;color:var(--text3)">#</span><input maxlength="6" value="${(inp.value||'#4a6cf7').replace('#','')}" style="flex:1;background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-size:13px;font-family:monospace;color:var(--text);outline:none" oninput="fsPick('#'+this.value)"><button onclick="document.getElementById('fs-cpicker')?.remove()" style="padding:5px 12px;border-radius:8px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;border:none">확인</button></div>`;
+  document.body.appendChild(pop);
+  setTimeout(()=>document.addEventListener('mousedown',function oc(e){if(!pop.contains(e.target)&&e.target!==swatch){pop.remove();document.removeEventListener('mousedown',oc)}},),100);
+}
+window.fsPick=fsPick;window.openFsColorPicker=openFsColorPicker;
+window.detailView=detailView;window.profileView=profileView;
+window.mobBar=mobBar;window.getTrendingTags=getTrendingTags;window.getWeeklyTop=getWeeklyTop;
+window.broadcastTyping=broadcastTyping;
+
 // ═══ GLOBAL EXPORTS ═══
 Object.assign(window,{render,goHome,goForest,goChannel,goSub,go,goProfile,goBack,openDetail,doSearch,openDM,openFindForest,like,toggleBookmark,likeCmt,toggleReply,addCmt,addReply,delPost,follow,toggleJoin,toggleReaction,toggleReactPop,share,viewImg,downloadFile,sendFriendReq,acceptFriend,rejectFriend,sendDM,sendChat,setChatReply,clearChatReply,scrollToMsg,toggleMsgReactPop,openCompose,renderForestDD,renderChDD,pickComposeForest,pickComposeCh,toggleDD,closeAllDD,toggleAnon,rich,pickImg,pickFile,drawPreview,submitPost,openAuth,doAuth,openEditProfile,uploadAvatar,uploadBanner,saveProfile,logout,openSettings,toggleTheme,openCreateForest,_renderCreateForest,_setModalContent,pickNfTemplate,pickNfStep,pickNfColor,pickNfEmoji,previewForestIcon,previewForestBanner,createForest,openForestSettings,openForestEditModal,pickFSType,previewEditIcon,previewEditBanner,saveForest,addChannel,openAddChannel,pickChType,openEdit,saveEdit,closeM,toggleMemberPanel,togglePinPanel,toggleNotifPanel,closeSidePanel,openGifPop,insertChatEmoji,toggleChatEmoji,chatAttachImg,openNfColorPicker,
   cdd,toggleCDD,pickCDD,
   searchByTag,votePoll,renderPoll,toggleSubscribe,blockUser,unblockUser,reportPost,reportUser,setMemberRole,getRoleBadge,markAllNotifRead,saveDraft,loadDrafts,openDrafts,restoreDraft,openSchedulePicker,setSchedule,parseMentions,deleteDM,dmAttachImg,setVisibility,addComposePoll,renderComposePoll,
   setupMentionAutocomplete,pickMention,closeMentionPop,_setPanelBlur,
   openForestSettings:openForestEditModal, deleteForest, searchGif, sendGif, openChannelPerms, setCperm, saveCperm, saveFsCfg, toggleFsCfg, setFsCfg,
-  gifSearchDebounce, uploadBanner, uploadAvatar, uploadToStorage});
-window.S=S;window.pImgs=pImgs;window.pFiles=pFiles;
+  gifSearchDebounce, uploadBanner, uploadAvatar, uploadToStorage,
+  getLvBadge, initRealtime, modal, toast});
+window.S=S;
+Object.defineProperty(window,'pImgs',{get:()=>pImgs,set:v=>{pImgs=v}});
+Object.defineProperty(window,'pFiles',{get:()=>pFiles,set:v=>{pFiles=v}});
 Object.defineProperties(window,{nfStep:{get:()=>nfStep,set:v=>{nfStep=v}},nfColor:{get:()=>nfColor,set:v=>{nfColor=v}},nfEmoji:{get:()=>nfEmoji,set:v=>{nfEmoji=v}},nfName:{get:()=>nfName,set:v=>{nfName=v}}});
 
 // ═══ INIT ═══
