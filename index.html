@@ -796,30 +796,37 @@ let S={me:null,view:'home',subview:'feed',forest:null,channel:null,target:null,q
 
 function bid(){let id=localStorage.getItem('bid');if(!id){id='g_'+Math.random().toString(36).slice(2,9);localStorage.setItem('bid',id)}return id}
 const BID=bid();const whoAmI=()=>S.me||BID;
+let _loadAllRunning=false;
 async function loadSes(){
   try{
     S.forest=localStorage.getItem('forest')||null;
     S.theme=localStorage.getItem('theme')||'light';
     applyTheme();
-    // Supabase Auth 세션 확인
+    const cached=localStorage.getItem('me');
+    if(cached)S.me=cached;
     const {data:{session}}=await sb.auth.getSession();
     if(session){
-      // 세션 있으면 닉네임 가져오기
       const {data:prof}=await sb.from('profiles').select('nick').eq('user_id',session.user.id).maybeSingle();
       if(prof){S.me=prof.nick;localStorage.setItem('me',prof.nick);}
+      else if(cached){S.me=cached;}
       else{S.me=null;}
     }else{
       S.me=null;localStorage.removeItem('me');
     }
-  }catch(e){S.me=null;}
+  }catch(e){
+    const cached=localStorage.getItem('me');
+    if(cached)S.me=cached;
+  }
 }
 
-// Auth 상태 변경 감지 (다른 탭 로그아웃 등)
 sb.auth.onAuthStateChange(async(event,session)=>{
-  if(event==='SIGNED_OUT'){S.me=null;localStorage.removeItem('me');render();}
-  else if(event==='SIGNED_IN'&&session){
+  if(event==='SIGNED_OUT'){S.me=null;localStorage.removeItem('me');render();return;}
+  if(event==='SIGNED_IN'&&session){
     const {data:prof}=await sb.from('profiles').select('nick').eq('user_id',session.user.id).maybeSingle();
-    if(prof&&prof.nick!==S.me){S.me=prof.nick;localStorage.setItem('me',prof.nick);await loadAll();}
+    if(prof&&prof.nick!==S.me){
+      S.me=prof.nick;localStorage.setItem('me',prof.nick);
+      if(!_loadAllRunning)await loadAll();
+    }
   }
 });
 function saveSes(){try{S.me?localStorage.setItem('me',S.me):localStorage.removeItem('me');S.forest?localStorage.setItem('forest',S.forest):localStorage.removeItem('forest');localStorage.setItem('theme',S.theme)}catch(e){}}
@@ -932,6 +939,8 @@ function renderRich(h){return sanitize(h||'')}
 
 // ═══ DATA LOADING ═══
 async function loadAll(){
+  if(_loadAllRunning)return;
+  _loadAllRunning=true;
   S.loading=true;render();
   try{
     const safe=q=>q.then(r=>r).catch(()=>({data:[],error:null}));
@@ -998,6 +1007,7 @@ async function loadAll(){
   }catch(e){console.error('loadAll 오류:',e)}
   finally{
     S.loading=false;
+    _loadAllRunning=false;
     if(!_rtChannel)initRealtime();
     render();
   }
@@ -2133,7 +2143,7 @@ async function doAuth(type){
       closeM();toast(`${classN}반 ${numN}번 ${name}님, 환영해요! 🎋`);
       S.subview='feed';S.forest=null;S.channel=null;
       await loadAll();
-    }catch(e){toast('가입 실패: '+e.message)}
+    }catch(e){const m=e.message||'';if(m.includes('already registered')||m.includes('already been registered'))toast('이미 사용된 이메일이에요. 다른 이메일로 가입하거나 로그인해 보세요.');else if(m.includes('invalid')||m.includes('email'))toast('이메일 형식이 올바르지 않아요.');else toast('가입 실패: '+m);}
   }
 }
 
