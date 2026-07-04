@@ -1583,910 +1583,138 @@ async function saveCperm(chId){
   try{await sb.from('channels').update({permissions:perms}).eq('id',chId);toast('권한 저장됨!');await loadAll();closeM()}catch(e){toast('저장 실패')}
 }
 window.openChannelPerms=openChannelPerms;window.setCperm=setCperm;window.saveCperm=saveCperm;
-function chatAttachImg(inp,chId){
-  const f=inp.files[0];if(!f)return;if(f.size>2*1024*1024){toast('2MB 이하만');return}
-  const r=new FileReader();r.onload=async e=>{
-    try{await sb.from('posts').insert({forest_id:S.forest,channel_id:chId,author:S.me,content:'',imgs:[e.target.result],anon:false});await loadAll()}catch(err){toast('전송 실패')}
-  };r.readAsDataURL(f);
+// ─── Supabase Storage 업로드 공통 함수 ───
+async function uploadToStorage(file, bucket, path){
+  const compressed=await compressImage(file, bucket==='avatars'?400:1200, 0.82);
+  const {data,error}=await sb.storage.from(bucket).upload(path,compressed,{contentType:'image/jpeg',upsert:true});
+  if(error)throw error;
+  const {data:{publicUrl}}=sb.storage.from(bucket).getPublicUrl(path);
+  return publicUrl;
 }
-
-function setChatReply(id,nick){chatReplyTo={id,nick};render()}
-function clearChatReply(){chatReplyTo=null;render()}
-function scrollToMsg(id){const el=document.getElementById('msg-'+id);if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.style.background='var(--accent-soft)';setTimeout(()=>el.style.background='',1500)}}
-function toggleMsgReactPop(event,msgId){
-  event.stopPropagation();
-  // 기존 팝업 제거
-  document.querySelectorAll('.msg-react-pop').forEach(x=>x.remove());
-  const pop=document.createElement('div');pop.className='msg-react-pop';
-  pop.innerHTML=['👍','❤️','😂','😮','😢','🔥','👏','🎉'].map(e=>`<button onclick="event.stopPropagation();toggleReaction(${msgId},'${e}');this.parentElement.remove()">${e}</button>`).join('');
-  const msgEl=document.getElementById('msg-'+msgId);
-  if(msgEl){msgEl.style.position='relative';msgEl.appendChild(pop)}
-  setTimeout(()=>{document.addEventListener('click',function rm(){pop.remove();document.removeEventListener('click',rm)},{once:true})},10);
+function compressImage(file,maxPx,quality){
+  return new Promise((res,rej)=>{
+    const img=new Image();const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      let w=img.width,h=img.height;
+      if(w>maxPx||h>maxPx){if(w>h){h=Math.round(h*maxPx/w);w=maxPx}else{w=Math.round(w*maxPx/h);h=maxPx}}
+      const c=document.createElement('canvas');c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      c.toBlob(b=>{URL.revokeObjectURL(url);res(b)},'image/jpeg',quality);
+    };img.onerror=rej;img.src=url;
+  });
 }
-
-// ═══ POST CARD (리스트) ═══
-function pcard(p){
-  // 차단된 사용자 글 숨기기
-  if(p.author&&S.blockedUsers.has(p.author))return `<div class="pcard" style="opacity:.4;pointer-events:none;text-align:center;padding:12px;font-size:13px;color:var(--text3)">차단된 사용자의 글이에요</div>`;
-  // 채팅/reply 글 숨기기
-  const ch=S.channels[p.channel_id];
-  if(ch&&ch.type==='chat')return '';
-  if((p.title||'').startsWith('reply:'))return '';
-  const nick=p.author||p.anon_nick;const isAnon=!p.author;
-  const title=p.title&&p.title.trim()?p.title:plainText(p.content).slice(0,40);
-  const preview=plainText(p.content);
-  const liked=S.likes.has(p.id);const likeC=S.likeCounts[p.id]||0;
-  const f=S.forests[p.forest_id];
-  const fileList=(p.files&&p.files.length)?`<div class="pcard-files">${p.files.map(fl=>`<div class="pcard-file">${ic('file','xs')} ${esc(fl.name||'파일')}</div>`).join('')}</div>`:'';
-  const imgBadge=(p.imgs&&p.imgs.length)?`<span class="badge">${ic('image','xs')} ${p.imgs.length}</span>`:'';
-  const tagHtml=(p.tags&&p.tags.length)?`<div class="pcard-tags">${p.tags.map(t=>`<span class="ptag" onclick="event.stopPropagation();searchByTag('${escA(t)}')">#${esc(t)}</span>`).join('')}</div>`:'';
-  const hasPoll=p.poll&&p.poll.options;
-  const pollBadge=hasPoll?`<span class="badge">📊</span>`:'';
-  const visIcon=p.visibility==='friends'?`<span title="친구만">${ic('users','xs')}</span>`:p.visibility==='members'?`<span title="멤버만">${ic('lock','xs')}</span>`:'';
-  return `<div class="pcard" onclick="openDetail(${p.id})">
-    <div class="pcard-top">
-      <div class="av ${isAnon?'anon':''}" onclick="event.stopPropagation();${isAnon?'':`goProfile('${p.author}')`}">${isAnon?ic('user','sm'):`<img src="${avatarOf(p.author)}">`}</div>
-      <div class="pcard-who">
-        <div class="pcard-name">${esc(nick)} ${isAnon?'<span class="badge">익명</span>':(!isAnon?getLvBadge(p.author):'')} ${imgBadge} ${pollBadge} ${visIcon}</div>
-        <div class="pcard-time">${f?esc(f.name)+' · ':''}${ago(p.created_at)}</div>
-      </div>
-    </div>
-    <div class="pcard-title">${esc(title)}${p.comments.length?`<span class="cmt-cnt">[${p.comments.length}]</span>`:''}</div>
-    <div class="pcard-preview">${esc(preview)}</div>
-    ${tagHtml}${fileList}
-    <div class="pcard-foot">
-      <span class="act ${liked?'liked':''}" onclick="event.stopPropagation();like(${p.id})">${ic('heart','sm')} ${likeC||''}</span>
-      <span class="act" onclick="event.stopPropagation();openDetail(${p.id})">${ic('comment','sm')} ${p.comments.length||''}</span>
-      <span class="act">${ic('eye','sm')} ${p.views||0}</span>
-      <span class="spacer"></span>
-      <span class="act" onclick="event.stopPropagation();toggleBookmark(${p.id})">${ic('bookmark','sm '+(S.bookmarks.has(p.id)?'fill':''))}</span>
-    </div>
-  </div>`;
+function uploadAvatar(inp){
+  const f=inp.files[0];if(!f)return;
+  const prev=document.getElementById('edit-av');
+  if(prev)prev.src=URL.createObjectURL(f);
+  pendingAv=f;toast('저장 버튼을 누르면 업로드돼요','info');
 }
-
-// ═══ DETAIL VIEW ═══
-function detailView(){
-  const p=S.posts.find(x=>x.id===S.target);
-  if(!p)return `<div class="empty">${ic('edit')}<h3>글을 찾을 수 없어요</h3></div>`;
-  const nick=p.author||p.anon_nick;const isAnon=!p.author;
-  const liked=S.likes.has(p.id);const likeC=S.likeCounts[p.id]||0;
-  const bookmarked=S.bookmarks.has(p.id);
-  const title=p.title&&p.title.trim()?p.title:plainText(p.content).slice(0,40);
-  let imgs='';const im=p.imgs||[];if(im.length){const n=Math.min(im.length,4);imgs=`<div class="post-imgs n${n}">${im.slice(0,4).map(x=>`<img src="${x}" onclick="viewImg('${x}')">`).join('')}</div>`}
-  // 파일
-  let files='';if(p.files&&p.files.length){files=`<div style="margin:10px 0">${p.files.map(fl=>`<div class="pcard-file" style="cursor:pointer;margin-bottom:6px" onclick="downloadFile('${escA(fl.name||'파일')}','${escA(fl.data||'')}')">${ic('file','sm')} <span style="flex:1">${esc(fl.name||'파일')}</span> ${ic('download','sm')}</div>`).join('')}</div>`}
-  const isMine=p.author===S.me;
-  const editBtn=isMine?`<button class="d-act" onclick="openEdit(${p.id})">${ic('edit','sm')} 수정</button>`:'';
-  const delBtn=isMine?`<button class="d-act" onclick="delPost(${p.id})">${ic('trash','sm')} 삭제</button>`:'';
-  const subbed=S.postSubscriptions.has(p.id);
-  const subBtn=S.me?`<button class="d-act ${subbed?'bookmarked':''}" onclick="toggleSubscribe(${p.id})" title="${subbed?'구독 해제':'새 댓글 알림 받기'}">${ic('bell','sm')} ${subbed?'구독중':'구독'}</button>`:'';
-  const reportBtn=!isMine&&S.me?`<button class="d-act" onclick="reportPost(${p.id})" style="color:var(--like);opacity:.7">${ic('eye','sm')} 신고</button>`:'';
-  const blockBtn=!isMine&&p.author&&S.me?`<button class="d-act" onclick="blockUser('${p.author}')" style="opacity:.6;font-size:12px">차단</button>`:'';
-  // 반응
-  const rmap=S.reactions[p.id]||{};
-  const rchips=Object.entries(rmap).map(([em,cnt])=>`<div class="reaction ${S.myReactions.has(p.id+'|'+em)?'on':''}" onclick="toggleReaction(${p.id},'${em}')">${em} ${cnt}</div>`).join('');
-  // 태그
-  const tagHtml=(p.tags&&p.tags.length)?`<div class="pcard-tags" style="margin:10px 0">${p.tags.map(t=>`<span class="ptag" onclick="searchByTag('${escA(t)}')">#${esc(t)}</span>`).join('')}</div>`:'';
-  // 투표
-  const pollHtml=renderPoll(p);
-  // 대댓글
-  const topCmts=(p.comments||[]).filter(c=>!c.parent_id);
-  // 공개범위 표시
-  const visLabel=p.visibility==='friends'?`<span style="color:var(--text3);font-size:12px">${ic('users','xs')} 친구만</span>`:p.visibility==='members'?`<span style="color:var(--text3);font-size:12px">${ic('lock','xs')} 멤버만</span>`:'';
-  return `<div class="detail">
-    <div class="pcard-top">
-      <div class="av ${isAnon?'anon':'lg'}" onclick="${isAnon?'':`goProfile('${p.author}')`}">${isAnon?ic('user','sm'):`<img src="${avatarOf(p.author)}">`}</div>
-      <div class="pcard-who">
-        <div class="pcard-name" style="font-size:15px">${esc(nick)} ${isAnon?'<span class="badge">익명</span>':getLvBadge(p.author)} ${visLabel}</div>
-        <div class="pcard-time">${ago(p.created_at)}</div>
-      </div>
-    </div>
-    <div class="detail-title">${esc(title)}</div>
-    <div class="detail-body">${parseMentions(renderRich(p.content))}</div>
-    ${imgs}${pollHtml}${tagHtml}${files}
-    <div class="reactions">${rchips}<div class="react-add" id="ra-${p.id}" onclick="toggleReactPop(${p.id})">${ic('smile','sm')}<div class="react-pop hidden" id="rp-${p.id}">${['👍','❤️','😂','😮','😢','🔥','👏','🎉'].map(e=>`<button onclick="event.stopPropagation();toggleReaction(${p.id},'${e}')">${e}</button>`).join('')}</div></div></div>
-    <div class="detail-meta"><span>${ic('eye','sm')} 조회 ${p.views||0}</span><span>${ic('comment','sm')} 댓글 ${p.comments.length}</span></div>
-    <div class="detail-acts">
-      <button class="d-act ${liked?'liked':''}" onclick="like(${p.id})">${ic('heart','sm')} 좋아요 ${likeC}</button>
-      <button class="d-act ${bookmarked?'bookmarked':''}" onclick="toggleBookmark(${p.id})">${ic('bookmark','sm')} ${bookmarked?'저장됨':'저장'}</button>
-      <button class="d-act" onclick="share(${p.id})">${ic('share','sm')} 공유</button>
-      ${subBtn}${editBtn}${delBtn}${reportBtn}${blockBtn}
-    </div>
-    <div class="cmt-title">댓글 <span>${p.comments.length}</span></div>
-    ${topCmts.map(c=>cmtRow(c,p)).join('')||'<div style="font-size:13px;color:var(--text3);padding:8px 0 14px">첫 댓글을 남겨보세요</div>'}
-    <div class="cmt-write">
-      <input id="ci-${p.id}" placeholder="댓글 남기기... (@닉네임 으로 멘션)" onkeydown="if(event.key==='Enter')addCmt(${p.id})">
-      <button class="cmt-send" onclick="addCmt(${p.id})">${ic('send','sm')}</button>
-    </div>
-  </div>`;
+function uploadBanner(inp){
+  const f=inp.files[0];if(!f)return;
+  const tmpUrl=URL.createObjectURL(f);
+  const wrap=document.querySelector('[onclick="document.getElementById(\'prof-banner-in\').click()"]');
+  if(wrap)wrap.style.background=`url(${tmpUrl}) center/cover`;
+  pendingBanner=f;toast('저장 버튼을 누르면 업로드돼요','info');
 }
-function cmtRow(c,p){
-  const nick=c.author||c.anon_nick;const isAnon=!c.author;
-  const cliked=S.cmtLikes.has(c.id);const clikeC=S.cmtLikeCounts[c.id]||0;
-  const replies=p?p.comments.filter(x=>x.parent_id===c.id):[];
-  return `<div class="cmt"><div class="av sm ${isAnon?'anon':''}" onclick="${isAnon?'':`goProfile('${c.author}')`}">${isAnon?ic('user','xs'):`<img src="${avatarOf(c.author)}">`}</div><div class="cmt-col"><div class="cmt-head"><span class="cmt-nm" ${isAnon?'':`onclick="goProfile('${c.author}')"`}>${esc(nick)}</span>${isAnon?'<span class="badge">익명</span>':''}<span class="cmt-time">${ago(c.created_at)}</span></div><div class="cmt-txt">${parseMentions(renderRich(c.content))}</div><div class="cmt-actions"><span class="cmt-act ${cliked?'liked':''}" onclick="likeCmt(${c.id})">${ic('heart','xs')} ${clikeC||''}</span>${!c.parent_id?`<span class="cmt-act" onclick="toggleReply(${c.id})">${ic('comment','xs')} 답글</span>`:''}</div><div class="hidden" id="rb-${c.id}" style="margin-top:6px"><div class="cmt-write"><input id="ri-${c.id}" placeholder="답글..." onkeydown="if(event.key==='Enter')addReply(${p?p.id:0},${c.id})"><button class="cmt-send" style="width:36px;height:36px" onclick="addReply(${p?p.id:0},${c.id})">${ic('send','xs')}</button></div></div>${replies.length?`<div class="cmt-replies">${replies.map(r=>cmtRow(r,p)).join('')}</div>`:''}</div></div>`;
-}
-
-// ═══ PROFILE ═══
-function profileView(){
-  const nick=S.target;const u=S.users[nick];
-  if(!u)return `<div class="empty">${ic('user')}<h3>사용자를 찾을 수 없어요</h3></div>`;
-  const isMe=nick===S.me;
-  const isFollowing=S.me&&u.followers.includes(S.me);
-  const isFriend=S.friends.includes(nick);
-  const posts=S.posts.filter(p=>p.author===nick);
-  const totalLikes=posts.reduce((s,p)=>s+(S.likeCounts[p.id]||0),0);
-  const joinedForests=Object.values(S.forests).filter(f=>{const mem=f.members;return true}); // simplified
-  let actionBtns='';
-  if(isMe){actionBtns=`<button class="btn btn-secondary" style="padding:8px 16px" onclick="openEditProfile()">프로필 편집</button>`}
-  else if(S.me){actionBtns=`<button class="btn ${isFollowing?'btn-secondary':'btn-primary'}" style="padding:8px 16px" onclick="follow('${nick}')">${isFollowing?'팔로잉':'팔로우'}</button><button class="btn btn-secondary" style="padding:8px 16px" onclick="${isFriend?`openDM('${nick}')`:`sendFriendReq('${nick}')`}">${isFriend?'메시지':'친구 추가'}</button>`}
-  const memo=u.memo||'';
-  const memoHtml=`<div style="margin:10px 0 4px">
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-      <div class="prof-av" style="width:36px;height:36px;flex-shrink:0"><img src="${avatarOf(nick)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>
-      <span style="font-size:12px;font-weight:700;color:var(--text3)">${esc(nick)}의 메모</span>
-    </div>
-    <div id="memo-box-${nick}">
-      <div class="prof-memo-bubble" onclick="${isMe?`openMemoEdit('${nick}')`:''}" title="${isMe?'클릭해서 메모 편집':''}">
-        ${memo?memo:`<span class="memo-placeholder">${isMe?'✏️ 클릭해서 메모 작성...':'(메모 없음)'}</span>`}
-      </div>
-    </div>
-  </div>`;
-  const lastSeen=u.last_seen?`<span class="prof-chip">${ic('eye','xs')} 마지막 접속: ${ago(u.last_seen)}</span>`:'';
-  return `<div class="prof"><div class="prof-banner" style="background:${u.banner?`url(${u.banner})`:`linear-gradient(120deg,var(--accent),var(--violet))`};background-size:cover"><div class="fade"></div></div><div class="prof-body"><div class="prof-row"><div class="prof-av"><img src="${avatarOf(nick)}"></div><div style="display:flex;gap:8px">${actionBtns}</div></div><div class="prof-name">${esc(nick)} ${getLvBadge(nick)}</div><div class="prof-handle">@${esc(nick)}</div><div class="prof-bio">${u.bio?esc(u.bio):'<span style="color:var(--text3)">소개가 없어요</span>'}</div>${memoHtml}<div class="prof-chips"><span class="prof-chip">${ic('globe','xs')} 가입: ${new Date(u.created_at).toLocaleDateString('ko')}</span>${lastSeen}</div><div class="prof-stats"><div class="prof-stat" onclick="openFollowModal('${nick}','followers')"><div class="n">${u.followers.length}</div><div class="l">팔로워</div></div><div class="prof-stat" onclick="openFollowModal('${nick}','following')"><div class="n">${u.following.length}</div><div class="l">팔로잉</div></div><div class="prof-stat"><div class="n">${posts.length}</div><div class="l">게시글</div></div><div class="prof-stat"><div class="n">${totalLikes}</div><div class="l">좋아요</div></div></div></div></div>${posts.length?posts.map(p=>pcard(p)).join(''):`<div class="empty">${ic('edit')}<h3>게시글이 없어요</h3></div>`}`;
-}
-
-function mobBar(){
-  const btn=(sv,icon)=>`<button class="${S.subview===sv?'on':''}" onclick="goHome();goSub('home','${sv}')">${ic(icon,'sm')}<span>${{feed:'홈',friends:'친구',dms:'메시지',bookmarks:'저장'}[sv]||''}</span></button>`;
-  return `<div class="mob-bar">${btn('feed','home')}${btn('friends','users')}<button onclick="openCompose()" style="color:var(--accent)">${ic('plus','sm')}<span>글쓰기</span></button>${btn('dms','msgCircle')}${btn('bookmarks','bookmark')}</div>`;
-}
-
-// ═══ NAVIGATION ═══
-function goHome(){S.forest=null;S.channel=null;S.subview='feed';saveSes();render()}
-function goForest(id){S.forest=id;S.subview='feed';const f=S.forests[id];if(f&&f.channels.length)S.channel=f.channels[0].id;else S.channel=null;saveSes();render()}
-function goChannel(id){S.channel=id;S.subview='feed';render()}
-function goSub(v,sv){S.view=v;S.subview=sv;render()}
-function go(v,sv){S.view=v;S.subview=sv;render()}
-function goProfile(nick){S.subview='profile';S.target=nick;render()}
-function goBack(){S.subview='feed';render()}
-function openDetail(id){
-  S.subview='detail';S.target=id;
-  // 조회수 올리기 (실패해도 무시)
-  sb.from('posts').update({views:(S.posts.find(x=>x.id===id)?.views||0)+1}).eq('id',id).then(()=>{});
-  render();
-}
-function doSearch(v){S.q=v;render();const inp=document.getElementById('search-inp');if(inp){inp.focus();inp.setSelectionRange(v.length,v.length)}}
-function openDM(nick){S.forest=null;S.subview='dm';S.dmTarget=nick;render();setTimeout(()=>{const el=document.getElementById('dm-msgs');if(el)el.scrollTop=el.scrollHeight},50)}
-function openFindForest(){S.forest=null;S.subview='findforest';render()}
-
-// ═══ ACTIONS ═══
-async function like(id){
-  const liked=S.likes.has(id);const me=whoAmI();
-  if(liked){S.likes.delete(id);S.likeCounts[id]=Math.max(0,(S.likeCounts[id]||1)-1)}
-  else{
-    S.likes.add(id);S.likeCounts[id]=(S.likeCounts[id]||0)+1;
-    // 하트 팝 애니메이션
-    document.querySelectorAll(`.act.liked .ico, .d-act.liked .ico`).forEach(el=>{
-      el.style.animation='none';requestAnimationFrame(()=>{el.style.animation=''});
-    });
-  }
-  render();
-  try{if(liked)await sb.from('likes').delete().eq('post_id',id).eq('liker',me);else await sb.from('likes').insert({post_id:id,liker:me})}catch(e){}
-}
-async function toggleBookmark(id){if(!S.me){toast('로그인이 필요해요');return}const has=S.bookmarks.has(id);if(has)S.bookmarks.delete(id);else S.bookmarks.add(id);render();try{if(has)await sb.from('bookmarks').delete().eq('post_id',id).eq('nick',S.me);else await sb.from('bookmarks').insert({post_id:id,nick:S.me})}catch(e){}}
-async function likeCmt(id){const liked=S.cmtLikes.has(id);const me=whoAmI();if(liked){S.cmtLikes.delete(id);S.cmtLikeCounts[id]=Math.max(0,(S.cmtLikeCounts[id]||1)-1)}else{S.cmtLikes.add(id);S.cmtLikeCounts[id]=(S.cmtLikeCounts[id]||0)+1}render();try{if(liked)await sb.from('comment_likes').delete().eq('comment_id',id).eq('liker',me);else await sb.from('comment_likes').insert({comment_id:id,liker:me})}catch(e){}}
-function toggleReply(id){document.getElementById('rb-'+id)?.classList.toggle('hidden')}
-async function addCmt(pid){
-  const inp=document.getElementById('ci-'+pid);if(!inp||!inp.value.trim())return;
-  const rawContent=inp.value.trim();const content=esc(rawContent);inp.value='';
+async function saveProfile(){
+  const bio=document.getElementById('edit-bio')?.value.trim()||'';
+  const patch={bio};
   try{
-    await sb.from('comments').insert({post_id:pid,author:S.me,anon_nick:S.me?null:anonNick(),content});
-    const mentions=[...rawContent.matchAll(/@(\w+)/g)].map(m=>m[1]).filter(n=>n!==S.me&&S.users[n]);
-    for(const nick of mentions){
-      try{await sb.from('notifications').insert({to_nick:nick,from_nick:S.me||'익명',type:'mention',message:`<b>${esc(S.me||'익명')}</b>님이 댓글에서 멘션했어요`})}catch(_){}
-    }
-    const post=S.posts.find(p=>p.id===pid);
-    if(post){
-      if(post.author&&post.author!==S.me){
-        try{await sb.from('notifications').insert({to_nick:post.author,from_nick:S.me||'익명',type:'comment',message:`<b>${esc(S.me||'익명')}</b>님이 댓글을 남겼어요`})}catch(_){}
-      }
-    }
-    await loadAll();
-    setTimeout(()=>{const cmts=document.querySelectorAll('.cmt');if(cmts.length)cmts[cmts.length-1].classList.add('new-item')},100);
-  }catch(e){toast('댓글 실패')}
-}
-async function addReply(pid,parentId){
-  const inp=document.getElementById('ri-'+parentId);if(!inp||!inp.value.trim())return;
-  const rawContent=inp.value.trim();const content=esc(rawContent);inp.value='';
-  try{
-    await sb.from('comments').insert({post_id:pid,parent_id:parentId,author:S.me,anon_nick:S.me?null:anonNick(),content});
-    const mentions=[...rawContent.matchAll(/@(\w+)/g)].map(m=>m[1]).filter(n=>n!==S.me&&S.users[n]);
-    for(const nick of mentions){
-      try{await sb.from('notifications').insert({to_nick:nick,from_nick:S.me||'익명',type:'mention',message:`<b>${esc(S.me||'익명')}</b>님이 답글에서 멘션했어요`})}catch(_){}
-    }
-    await loadAll();
-  }catch(e){toast('답글 실패')}
-}
-async function delPost(id){if(!confirm('삭제할까요?'))return;try{await sb.from('posts').delete().eq('id',id);toast('삭제됨');S.subview='feed';await loadAll()}catch(e){toast('삭제 실패')}}
-async function follow(nick){if(!S.me){openAuth();return}const isF=S.users[S.me]?.following.includes(nick);try{if(isF)await sb.from('follows').delete().eq('follower',S.me).eq('followee',nick);else await sb.from('follows').insert({follower:S.me,followee:nick});await loadAll()}catch(e){toast('실패')}}
-async function toggleJoin(id){
-  if(!S.me){toast('로그인 필요');openAuth();return}
-  const joined=S.myForests.has(id);
-  // 버튼 바운스 효과
-  const btn=document.querySelector(`[onclick*="toggleJoin('${id}')"]`);
-  if(btn){btn.style.transform='scale(.9)';setTimeout(()=>{btn.style.transform='';btn.style.transition='transform .2s cubic-bezier(.2,1,.3,1)'},100)}
-  try{
-    if(joined)await sb.from('forest_members').delete().eq('forest_id',id).eq('nick',S.me);
-    else{await sb.from('forest_members').insert({forest_id:id,nick:S.me});setTimeout(()=>sendJoinGreeting(id),500);}
-    toast(joined?'탈퇴됨':'🎋 가입했어요!');await loadAll()
-  }catch(e){toast('실패')}
-}
-async function toggleReaction(pid,emoji){const me=whoAmI();const key=pid+'|'+emoji;const has=S.myReactions.has(key);try{if(has){S.myReactions.delete(key);if(S.reactions[pid]?.[emoji])S.reactions[pid][emoji]--;await sb.from('reactions').delete().eq('post_id',pid).eq('reactor',me).eq('emoji',emoji)}else{S.myReactions.add(key);(S.reactions[pid]=S.reactions[pid]||{})[emoji]=(S.reactions[pid][emoji]||0)+1;await sb.from('reactions').insert({post_id:pid,reactor:me,emoji})}render()}catch(e){}}
-function toggleReactPop(pid){document.getElementById('rp-'+pid)?.classList.toggle('hidden')}
-function share(id){const p=S.posts.find(x=>x.id===id);const t=`[대나무숲] ${plainText(p.content).slice(0,60)}`;if(navigator.share)navigator.share({title:'대나무숲',text:t});else{try{navigator.clipboard.writeText(t)}catch(e){}toast('복사됨')}}
-function viewImg(src){
-  const v=document.createElement('div');
-  v.className='lightbox';
-  v.innerHTML=`<button class="lightbox-close" onclick="this.parentElement.remove()">${ic('x','sm')}</button><img src="${src}" onclick="event.stopPropagation()">`;
-  v.onclick=()=>v.remove();
-  document.body.appendChild(v);
-  document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){v.remove();document.removeEventListener('keydown',esc)}},{once:true});
-}
-function downloadFile(name,data){if(data){const a=document.createElement('a');a.href=data;a.download=name;a.click()}else{alert('인터넷에는 도움이 되는 파일도 있지만 꼭 그렇지만은 않을 수 있습니다.\n\n파일 데이터가 없어 다운로드할 수 없어요.')}}
-
-// ═══ SUPABASE REALTIME ═══
-let _rtChannel=null;
-let _onlineUsers=new Set();
-let _typingUsers={};  // {to_nick: {from_nick, timer}}
-let _newPostsCount=0;
-let _lastPostId=0;
-
-function initRealtime(){
-  if(_rtChannel)_rtChannel.unsubscribe();
-  _rtChannel=sb.channel('bamboo_realtime',{config:{presence:{key:S.me||BID}}});
-
-  // 온라인 상태
-  _rtChannel.on('presence',{event:'sync'},()=>{
-    const state=_rtChannel.presenceState();
-    _onlineUsers=new Set(Object.values(state).flat().map(p=>p.user).filter(Boolean));
-    // 멤버 패널 업데이트 (전체 re-render 없이)
-    const panel=document.querySelector('.member-panel-body');
-    if(panel)render();
-  });
-  _rtChannel.on('presence',{event:'join'},({key,newPresences})=>{
-    newPresences.forEach(p=>{if(p.user&&p.user!==S.me){toast(`${p.user}님이 접속했어요 👋`,'info')}});
-  });
-
-  // 새 글/댓글 실시간
-  _rtChannel.on('postgres_changes',{event:'INSERT',schema:'public',table:'posts'},payload=>{
-    const p=payload.new;
-    if(p.author===S.me)return;
-    // 현재 보고 있는 채널이면 배너 표시
-    if(p.channel_id===S.channel){
-      _newPostsCount++;
-      const banner=document.getElementById('new-posts-banner');
-      if(banner)banner.textContent=`↑ 새 글 ${_newPostsCount}개`;
-      else{
-        const mb=document.querySelector('.main-body');
-        if(mb){const b=document.createElement('div');b.id='new-posts-banner';b.className='new-posts-banner';b.textContent=`↑ 새 글 ${_newPostsCount}개`;b.onclick=()=>{_newPostsCount=0;b.remove();loadAll()};mb.prepend(b)}
-      }
-    }
-    // 내 글에 새 댓글이면 알림
-    if(p.channel_id!==S.channel)loadAll();
-  });
-
-  // 타이핑 실시간
-  _rtChannel.on('broadcast',{event:'typing'},({payload})=>{
-    if(!payload||payload.from===S.me)return;
-    // DM 상대방 타이핑
-    if(payload.to===S.me){
-      clearTimeout(_typingUsers[payload.from]);
-      _typingUsers[payload.from]=setTimeout(()=>{delete _typingUsers[payload.from];updateTypingUI()},3000);
-      updateTypingUI();
-    }
-  });
-
-  _rtChannel.subscribe(async(status)=>{
-    if(status==='SUBSCRIBED'&&S.me){
-      await _rtChannel.track({user:S.me,online_at:new Date().toISOString()});
-    }
-  });
-}
-
-function updateTypingUI(){
-  const el=document.getElementById('dm-typing');
-  if(!el)return;
-  const typers=Object.keys(_typingUsers).filter(n=>n===S.dmTarget);
-  if(typers.length){
-    el.innerHTML=`<div style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;color:var(--text3)"><div class="typing-dots"><span></span><span></span><span></span></div>${esc(typers[0])} 입력 중...</div>`;
-    el.style.display='block';
-  }else{el.style.display='none'}
-}
-
-function broadcastTyping(){
-  if(!_rtChannel||!S.dmTarget||!S.me)return;
-  _rtChannel.send({type:'broadcast',event:'typing',payload:{from:S.me,to:S.dmTarget}});
-}
-
-// ═══ 팔로워/팔로잉 모달 ═══
-// 더 간단한 버전으로 교체
-function openFollowModal(nick,tab='followers'){
-  const u=S.users[nick];if(!u)return;
-  let curTab=tab;
-  const mkList=(t)=>{
-    const list=t==='followers'?u.followers:u.following;
-    if(!list.length)return `<div class="empty" style="padding:24px">${ic('users')}<h3>${t==='followers'?'팔로워':'팔로잉'}가 없어요</h3></div>`;
-    return list.map(n=>`<div class="friend-item" onclick="goProfile('${n}');closeM()"><div class="av"><img src="${avatarOf(n)}"></div><div class="info"><div class="nm">${esc(n)} ${getLvBadge(n)}</div><div class="activity">${esc(S.users[n]?.bio||'')}</div></div></div>`).join('');
-  };
-  const tabs=(t)=>['followers','following'].map(k=>`<button onclick="document.getElementById('fw-tab-followers').style.fontWeight=document.getElementById('fw-tab-following').style.fontWeight='400';this.style.fontWeight='700';document.getElementById('fw-body').innerHTML='${escA('<div>loading</div>')}';document.getElementById('fw-body').innerHTML=window._fwRender('${nick}','${k==='followers'?'followers':'following'}')" id="fw-tab-${k}" style="flex:1;padding:10px;font-weight:${t===k?'700':'400'};font-size:14px;border-bottom:2px solid ${t===k?'var(--accent)':'transparent'};color:${t===k?'var(--accent)':'var(--text2)'};cursor:pointer;transition:.15s">${k==='followers'?`팔로워 ${u.followers.length}`:`팔로잉 ${u.following.length}`}</button>`).join('');
-  window._fwRender=(n,t)=>mkList(t);
-  modal(`<div class="modal-head"><h2>${esc(nick)}</h2><button class="modal-x" onclick="closeM()">${ic('x','sm')}</button></div><div style="display:flex;border-bottom:1px solid var(--line)">${tabs(curTab)}</div><div class="modal-body" id="fw-body" style="padding:12px">${mkList(curTab)}</div>`);
-}
-
-// ═══ 숲 가입 인사말 ═══
-async function sendJoinGreeting(forestId){
-  const f=S.forests[forestId];if(!f||!S.me)return;
-  const greeting=f.welcome_msg||`안녕하세요! ${f.emoji} ${f.name}에 오신 것을 환영해요 🎋`;
-  const chatCh=f.channels?.find(c=>c.type==='chat');
-  if(!chatCh)return;
-  await sb.from('posts').insert({channel_id:chatCh.id,forest_id:forestId,author:null,anon_nick:'🎋 대나무숲',content:greeting,tags:[],imgs:[],files:[]});
-}
-
-// exports에 추가
-window.openFollowModal=openFollowModal;
-window.broadcastTyping=broadcastTyping;
-window.getLvBadge=getLvBadge;
-window.getTrendingTags=getTrendingTags;
-window.getWeeklyTop=getWeeklyTop;
-// ─── 커스텀 드롭다운 ───
-function cdd(id,opts,value,onChange){
-  const cur=opts.find(o=>o.v===value)||opts[0];
-  return `<div class="cdd" id="cdd-${id}">
-    <div class="cdd-trigger" onclick="toggleCDD('${id}')">
-      ${cur.icon?`<span>${cur.icon}</span>`:''}
-      <span id="cdd-${id}-label">${cur.l}</span>
-      <span class="cdd-arrow">${ic('chevDown','xs')}</span>
-    </div>
-    <div class="cdd-menu hidden" id="cdd-${id}-menu">
-      ${opts.map(o=>`<div class="cdd-opt ${o.v===value?'selected':''}" onclick="pickCDD('${id}','${o.v}','${o.l.replace(/'/g,"\\'")}','${onChange}')">
-        ${o.icon?`<span>${o.icon}</span>`:''}${o.l}
-      </div>`).join('')}
-    </div>
-  </div>`;
-}
-function toggleCDD(id){
-  const menu=document.getElementById('cdd-'+id+'-menu');
-  const wrap=document.getElementById('cdd-'+id);
-  if(!menu||!wrap)return;
-  const isOpen=!menu.classList.contains('hidden');
-  document.querySelectorAll('.cdd-menu').forEach(m=>m.classList.add('hidden'));
-  document.querySelectorAll('.cdd').forEach(c=>c.classList.remove('open'));
-  if(!isOpen){menu.classList.remove('hidden');wrap.classList.add('open')}
-}
-function pickCDD(id,val,label,cb){
-  document.getElementById('cdd-'+id+'-label').textContent=label;
-  document.getElementById('cdd-'+id+'-menu')?.classList.add('hidden');
-  document.getElementById('cdd-'+id)?.classList.remove('open');
-  document.querySelectorAll(`#cdd-${id}-menu .cdd-opt`).forEach(o=>o.classList.toggle('selected',o.querySelector('span:last-child')?.textContent.trim()===label||o.textContent.trim()===label));
-  if(cb&&window[cb])window[cb](val);
-}
-document.addEventListener('click',e=>{if(!e.target.closest('.cdd')){document.querySelectorAll('.cdd-menu').forEach(m=>m.classList.add('hidden'));document.querySelectorAll('.cdd').forEach(c=>c.classList.remove('open'))}});
-window.toggleCDD=toggleCDD;window.pickCDD=pickCDD;
-
-// ─── 프로필 메모 ───
-async function saveMemo(nick,text){
-  try{
-    await sb.from('profiles').update({memo:text}).eq('nick',nick);
-    toast('메모 저장됨!');await loadAll();
-    renderMemoBox(nick);
+    if(pendingAv instanceof File){toast('아바타 업로드 중...','info');patch.avatar=await uploadToStorage(pendingAv,'avatars',`${S.me}/avatar.jpg`);}
+    if(pendingBanner instanceof File){toast('배너 업로드 중...','info');patch.banner=await uploadToStorage(pendingBanner,'banners',`${S.me}/banner.jpg`);}
+    await sb.from('profiles').update(patch).eq('nick',S.me);
+    pendingAv=null;pendingBanner=null;closeM();toast('저장됐어요!');await loadAll();
   }catch(e){toast('저장 실패: '+e.message)}
 }
-function openMemoEdit(nick){
-  const u=S.users[nick];const cur=u?.memo||'';
-  const box=document.getElementById('memo-box-'+nick);if(!box)return;
-  box.innerHTML=`<div class="memo-edit-wrap">
-    <textarea id="memo-ta-${nick}" maxlength="200" placeholder="자기소개, 상태메시지, 하고싶은 말을 적어보세요...">${cur}</textarea>
-    <div style="display:flex;gap:8px;margin-top:6px">
-      <button class="btn btn-primary" style="flex:1;padding:7px" onclick="saveMemo('${nick}',document.getElementById('memo-ta-${nick}').value)">저장</button>
-      <button class="btn btn-secondary" style="padding:7px 14px" onclick="renderMemoBox('${nick}')">취소</button>
-    </div>
-  </div>`;
-  document.getElementById('memo-ta-'+nick)?.focus();
+function previewForestIcon(inp){
+  const f=inp.files[0];if(!f)return;newForestIcon=f;
+  const url=URL.createObjectURL(f);
+  const el=document.getElementById('nf-icon-preview');
+  if(el)el.innerHTML=`<img src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
 }
-function renderMemoBox(nick){
-  const u=S.users[nick];const memo=u?.memo||'';const isMe=nick===S.me;
-  const box=document.getElementById('memo-box-'+nick);if(!box)return;
-  box.innerHTML=`<div class="prof-memo-bubble" onclick="${isMe?`openMemoEdit('${nick}')`:''}" title="${isMe?'클릭해서 메모 편집':''}">
-    ${memo?memo:`<span class="memo-placeholder">${isMe?'✏️ 클릭해서 메모 작성...':'(메모 없음)'}</span>`}
-  </div>`;
+function previewForestBanner(inp){
+  const f=inp.files[0];if(!f)return;newForestBanner=f;
+  const url=URL.createObjectURL(f);
+  const el=document.getElementById('nf-banner-preview');
+  if(el){el.innerHTML='';el.style.background=`url(${url}) center/cover`;}
 }
-window.saveMemo=saveMemo;window.openMemoEdit=openMemoEdit;window.renderMemoBox=renderMemoBox;
-
-function searchByTag(tag){
-  S.q=tag;window._searchTab='게시글';
-  go('home','search');
-  setTimeout(()=>{const el=document.getElementById('search-inp');if(el){el.value=tag;doSearch(tag)}},50);
+function previewEditIcon(inp){
+  const f=inp.files[0];if(!f)return;editForestIcon=f;
+  const url=URL.createObjectURL(f);
+  const el=document.getElementById('fs-icon-preview');
+  if(el)el.innerHTML=`<img src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
 }
-
-// ═══ 투표/설문 ═══
-async function votePoll(postId,optIdx){
-  if(!S.me){toast('로그인 필요');openAuth();return}
-  const hasVoted=[...S.myPollVotes].some(k=>k.startsWith(postId+'|'));
-  if(hasVoted){toast('이미 투표했어요');return}
+function previewEditBanner(inp){
+  const f=inp.files[0];if(!f)return;editForestBanner=f;
+  const url=URL.createObjectURL(f);
+  const bg=document.getElementById('fs-banner-bg');
+  if(bg)bg.style.background=`url(${url}) center/cover`;
+}
+async function chatAttachImg(inp,chId){
+  const f=inp.files[0];if(!f)return;inp.value='';
+  if(f.size>5*1024*1024){toast('5MB 이하만');return}
+  toast('이미지 업로드 중...','info');
   try{
-    await sb.from('poll_votes').insert({post_id:postId,option_idx:optIdx,voter:S.me});
-    S.myPollVotes.add(postId+'|'+optIdx);
-    if(!S.polls[postId])S.polls[postId]={};
-    S.polls[postId][optIdx]=(S.polls[postId][optIdx]||0)+1;
-    toast('투표했어요!');render();
-  }catch(e){toast('투표 실패')}
+    const path=`chat/${S.forest||'dm'}/${Date.now()}.jpg`;
+    const url=await uploadToStorage(f,'chat-images',path);
+    await sb.from('posts').insert({forest_id:S.forest,channel_id:chId,author:S.me,anon_nick:null,content:'',title:'',imgs:[url],tags:[],files:[]});
+    await loadAll();setTimeout(()=>{const el=document.getElementById('chat-msgs');if(el)el.scrollTo({top:el.scrollHeight,behavior:'smooth'})},100);
+  }catch(e){toast('업로드 실패: '+e.message)}
 }
-function renderPoll(post){
-  const poll=post.poll;if(!poll||!poll.options)return '';
-  const totalVotes=Object.values(S.polls[post.id]||{}).reduce((a,b)=>a+b,0);
-  const hasVoted=[...S.myPollVotes].some(k=>k.startsWith(post.id+'|'));
-  const opts=poll.options.map((opt,i)=>{
-    const cnt=(S.polls[post.id]||{})[i]||0;
-    const pct=totalVotes?Math.round(cnt/totalVotes*100):0;
-    const myVote=S.myPollVotes.has(post.id+'|'+i);
-    return `<div class="poll-option" onclick="${hasVoted?'':'votePoll('+post.id+','+i+')'}">
-      <div class="poll-bar-wrap" style="flex:1">
-        <div class="poll-bar" style="width:${pct}%;background:${myVote?'var(--accent)':'var(--accent-soft)'}"></div>
-        <span class="poll-bar-label">${esc(opt)}${myVote?' ✓':''}</span>
-        <span class="poll-bar-pct">${hasVoted?pct+'%':''}</span>
-      </div>
-    </div>`;
-  }).join('');
-  return `<div class="poll-wrap"><div style="font-size:13px;font-weight:700;margin-bottom:10px">📊 ${esc(poll.question||'투표')}</div>${opts}<div class="poll-meta">총 ${totalVotes}표${poll.ends_at?` · ${ago(poll.ends_at)} 종료`:''}</div></div>`;
-}
-
-// ═══ 글 구독 ═══
-async function toggleSubscribe(postId){
-  if(!S.me){toast('로그인 필요');openAuth();return}
-  const on=S.postSubscriptions.has(postId);
+async function dmAttachImg(inp){
+  const f=inp.files[0];if(!f)return;inp.value='';
+  if(f.size>5*1024*1024){toast('5MB 이하만');return}
+  toast('이미지 업로드 중...','info');
   try{
-    if(on){await sb.from('post_subscriptions').delete().eq('post_id',postId).eq('nick',S.me);S.postSubscriptions.delete(postId);toast('구독 해제됨')}
-    else{await sb.from('post_subscriptions').insert({post_id:postId,nick:S.me});S.postSubscriptions.add(postId);toast('구독됨 — 새 댓글이 달리면 알려드릴게요')}
-    render();
-  }catch(e){toast('실패')}
+    const path=`dm/${S.me}/${Date.now()}.jpg`;
+    S._dmImg=await uploadToStorage(f,'chat-images',path);
+    toast('이미지 첨부됨 — 전송 버튼 누르세요');
+  }catch(e){toast('업로드 실패')}
 }
-
-// ═══ 차단/신고 ═══
-async function blockUser(nick){
-  if(!S.me){toast('로그인 필요');return}
-  if(!confirm(`${nick}님을 차단할까요? 이 사람의 글이 보이지 않게 돼요.`))return;
-  try{
-    await sb.from('blocked_users').insert({blocker:S.me,blocked:nick});
-    S.blockedUsers.add(nick);toast(`${nick}님을 차단했어요`);render();
-  }catch(e){
-    // 이미 차단됐거나 테이블 없으면 로컬에만 적용
-    S.blockedUsers.add(nick);toast(`${nick}님을 차단했어요`);render();
+function pickImg(inp){
+  for(const f of inp.files){
+    if(f.size>5*1024*1024){toast('5MB 이하만');continue}
+    const tmpUrl=URL.createObjectURL(f);
+    pImgs.push({file:f,url:tmpUrl});drawPreview();
   }
 }
-async function unblockUser(nick){
-  if(!S.me)return;
-  try{await sb.from('blocked_users').delete().eq('blocker',S.me).eq('blocked',nick);S.blockedUsers.delete(nick);toast('차단 해제됨');render()}catch(e){}
-}
-async function reportPost(postId){
-  if(!S.me){toast('로그인 필요');openAuth();return}
-  const reason=prompt('신고 이유를 입력하세요:');
-  if(!reason)return;
-  try{await sb.from('reports').insert({reporter:S.me,post_id:postId,reason});toast('신고가 접수됐어요')}catch(e){toast('신고 접수됨')}
-}
-async function reportUser(nick){
-  if(!S.me){toast('로그인 필요');openAuth();return}
-  const reason=prompt(`${nick}님을 신고하는 이유:`);
-  if(!reason)return;
-  try{await sb.from('reports').insert({reporter:S.me,reported_nick:nick,reason});toast('신고가 접수됐어요')}catch(e){toast('신고 접수됨')}
-}
-
-// ═══ 역할/등급 ═══
-async function setMemberRole(forestId,nick,role){
-  const f=S.forests[forestId];
-  if(!f||f.owner!==S.me){toast('숲주인만 역할을 바꿀 수 있어요');return}
-  try{await sb.from('forest_members').update({role}).eq('forest_id',forestId).eq('nick',nick);toast(`${nick}님의 역할을 ${role}로 변경했어요`);await loadAll()}catch(e){toast('실패')}
-}
-function getRoleBadge(forestId,nick){
-  const role=(S.memberRoles[forestId]||{})[nick];
-  if(role==='owner')return `<span class="role-owner">👑 숲주인</span>`;
-  if(role==='mod')return `<span class="role-mod">🛡 관리자</span>`;
-  return '';
-}
-
-// ═══ 알림 읽음 처리 ═══
-async function markAllNotifRead(){
-  if(!S.me||!S.notifications.length)return;
-  const ids=S.notifications.filter(n=>!n.read_at).map(n=>n.id);
-  if(!ids.length)return;
-  try{await sb.from('notifications').update({read_at:new Date().toISOString()}).in('id',ids);S.unreadNotifCount=0;render()}catch(e){}
-}
-
-// ═══ 임시저장 ═══
-function saveDraft(){
-  const ed=document.getElementById('editor');
-  const title=document.getElementById('c-title')?.value||'';
-  const content=ed?ed.innerHTML:'';
-  if(!title&&!content)return;
-  const key='draft_'+Date.now();
-  const draft={key,title,content,time:new Date().toISOString(),forestId:composeForestId,chId:composeChId};
-  try{const drafts=JSON.parse(localStorage.getItem('bamboo_drafts')||'{}');drafts[key]=draft;localStorage.setItem('bamboo_drafts',JSON.stringify(drafts))}catch(e){}
-  toast('임시저장됨');
-}
-function loadDrafts(){
-  try{return JSON.parse(localStorage.getItem('bamboo_drafts')||'{}')}catch(e){return{}}
-}
-function openDrafts(){
-  const drafts=loadDrafts();
-  const keys=Object.keys(drafts).sort((a,b)=>b-a);
-  if(!keys.length){toast('임시저장된 글이 없어요');return}
-  const items=keys.map(k=>{
-    const d=drafts[k];
-    return `<div style="padding:12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;background:var(--card2)" onclick="restoreDraft('${k}')">
-      <div style="font-weight:600;margin-bottom:4px">${esc(d.title||'(제목 없음)')}</div>
-      <div style="font-size:12px;color:var(--text3)">${ago(d.time)}</div>
-    </div>`;
-  }).join('');
-  modal(`<div class="modal-head"><h2>임시저장 글</h2><button class="modal-x" onclick="closeM()">${ic('x','sm')}</button></div><div class="modal-body">${items}</div>`);
-}
-function restoreDraft(key){
-  const drafts=loadDrafts();
-  const d=drafts[key];if(!d)return;
-  closeM();
-  setTimeout(()=>{
-    openCompose();
-    setTimeout(()=>{
-      const ed=document.getElementById('editor');
-      const titleEl=document.getElementById('c-title');
-      if(ed)ed.innerHTML=d.content||'';
-      if(titleEl)titleEl.value=d.title||'';
-    },100);
-  },100);
-}
-
-// ═══ 예약 게시 ═══
-function openSchedulePicker(){
-  const now=new Date(Date.now()+60*60*1000);
-  const iso=now.toISOString().slice(0,16);
-  modal(`<div class="modal-head"><h2>예약 게시 시간 설정</h2><button class="modal-x" onclick="closeM()">${ic('x','sm')}</button></div><div class="modal-body"><div class="mfield"><label>게시 시간</label><input class="inp" type="datetime-local" id="sch-time" value="${iso}" min="${new Date().toISOString().slice(0,16)}"></div><div style="display:flex;gap:8px"><button class="btn btn-secondary" style="flex:1" onclick="S._scheduleTime=null;closeM();toast('예약 취소됨')">예약 취소</button><button class="btn btn-primary" style="flex:2" onclick="setSchedule()">설정</button></div></div>`);
-}
-function setSchedule(){
-  const v=document.getElementById('sch-time')?.value;
-  if(!v){toast('시간을 선택하세요');return}
-  S._scheduleTime=v;closeM();toast(`${new Date(v).toLocaleString('ko')}에 게시 예약됨`);
-}
-
-// ═══ 멘션 처리 ═══
-function parseMentions(text){
-  return text.replace(/@(\w+)/g,(m,nick)=>{
-    if(S.users[nick])return `<span class="mention" onclick="goProfile('${nick}')">@${esc(nick)}</span>`;
-    return m;
-  });
-}
-
-// ═══ 멘션 자동완성 ═══
-let _mentionState={active:false,query:'',inputId:null,selectedIdx:0,matches:[]};
-
-function setupMentionAutocomplete(inputId){
-  const inp=document.getElementById(inputId);
-  if(!inp||inp._mentionSetup)return;
-  inp._mentionSetup=true;
-
-  inp.addEventListener('input',function(){
-    const val=this.value;
-    const cursor=this.selectionStart;
-    // @ 뒤의 텍스트 찾기
-    const before=val.slice(0,cursor);
-    const atMatch=before.match(/@(\w*)$/);
-    if(atMatch){
-      const q=atMatch[1].toLowerCase();
-      _mentionState.active=true;
-      _mentionState.query=q;
-      _mentionState.inputId=inputId;
-      _mentionState.selectedIdx=0;
-      _mentionState.matches=Object.keys(S.users)
-        .filter(n=>n.toLowerCase().startsWith(q)||n.toLowerCase().includes(q))
-        .filter(n=>n!==S.me)
-        .slice(0,6);
-      showMentionPop(this);
-    }else{
-      closeMentionPop();
-    }
-  });
-
-  inp.addEventListener('keydown',function(e){
-    if(!_mentionState.active||!_mentionState.matches.length)return;
-    if(e.key==='ArrowDown'){
-      e.preventDefault();
-      _mentionState.selectedIdx=(_mentionState.selectedIdx+1)%_mentionState.matches.length;
-      updateMentionPop();
-    }else if(e.key==='ArrowUp'){
-      e.preventDefault();
-      _mentionState.selectedIdx=(_mentionState.selectedIdx-1+_mentionState.matches.length)%_mentionState.matches.length;
-      updateMentionPop();
-    }else if(e.key==='Enter'||e.key==='Tab'){
-      if(_mentionState.active&&_mentionState.matches.length){
-        e.preventDefault();
-        pickMention(_mentionState.matches[_mentionState.selectedIdx]);
-      }
-    }else if(e.key==='Escape'){
-      closeMentionPop();
-    }
-  });
-
-  inp.addEventListener('blur',function(){
-    setTimeout(closeMentionPop,150);
-  });
-}
-
-function showMentionPop(inputEl){
-  let pop=document.getElementById('mention-autocomplete');
-  if(!pop){
-    pop=document.createElement('div');
-    pop.id='mention-autocomplete';
-    pop.className='mention-pop';
-    document.body.appendChild(pop);
-  }
-  const rect=inputEl.getBoundingClientRect();
-  pop.style.position='fixed';
-  pop.style.left=rect.left+'px';
-  pop.style.bottom=(window.innerHeight-rect.top+4)+'px';
-  pop.style.display='block';
-  updateMentionPop();
-}
-
-function updateMentionPop(){
-  const pop=document.getElementById('mention-autocomplete');
-  if(!pop)return;
-  const {matches,selectedIdx,query}=_mentionState;
-  if(!matches.length){
-    pop.innerHTML=`<div style="padding:12px;font-size:13px;color:var(--text3);text-align:center">일치하는 사용자 없음</div>`;
-    return;
-  }
-  pop.innerHTML=matches.map((nick,i)=>{
-    const u=S.users[nick];
-    return `<div class="mention-item ${i===selectedIdx?'selected':''}" onmousedown="event.preventDefault();pickMention('${nick}')">
-      <div class="av"><img src="${avatarOf(nick)}" style="width:28px;height:28px;border-radius:50%"></div>
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:13px">${esc(nick)}</div>
-        ${u?.bio?`<div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.bio)}</div>`:''}
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function pickMention(nick){
-  const inp=document.getElementById(_mentionState.inputId);
-  if(!inp)return;
-  const val=inp.value;
-  const cursor=inp.selectionStart;
-  const before=val.slice(0,cursor);
-  const after=val.slice(cursor);
-  // @query 부분을 @nick 으로 교체
-  const newBefore=before.replace(/@(\w*)$/,'@'+nick+' ');
-  inp.value=newBefore+after;
-  inp.focus();
-  inp.selectionStart=inp.selectionEnd=newBefore.length;
-  closeMentionPop();
-}
-
-function closeMentionPop(){
-  _mentionState.active=false;
-  const pop=document.getElementById('mention-autocomplete');
-  if(pop)pop.style.display='none';
-}
-
-// ═══ 레벨 뱃지 ═══
-function getLvBadge(nick){
-  const u=S.users[nick];if(!u)return '';
-  const cnt=u.posts||0;
-  if(cnt>=100)return `<span class="lv-badge lv6">🔥 전설</span>`;
-  if(cnt>=50)return `<span class="lv-badge lv5">⭐ 고수</span>`;
-  if(cnt>=20)return `<span class="lv-badge lv4">💜 숙련</span>`;
-  if(cnt>=10)return `<span class="lv-badge lv3">💙 활동</span>`;
-  if(cnt>=3)return `<span class="lv-badge lv2">🌱 새싹</span>`;
-  return `<span class="lv-badge lv1">씨앗</span>`;
-}
-
-// ═══ 트렌딩 태그 ═══
-function getTrendingTags(){
-  const tagCount={};
-  S.posts.forEach(p=>(p.tags||[]).forEach(t=>{tagCount[t]=(tagCount[t]||0)+1}));
-  return Object.entries(tagCount).sort((a,b)=>b[1]-a[1]).slice(0,12);
-}
-
-// ═══ 주간 인기글 (7일 이내) ═══
-function getWeeklyTop(){
-  const week=Date.now()-7*24*3600*1000;
-  return S.posts
-    .filter(p=>{
-      const ch=S.channels[p.channel_id];
-      if(ch&&ch.type==='chat')return false;  // 채팅글 제외
-      if((p.title||'').startsWith('reply:'))return false;  // 답장글 제외
-      if(!p.title&&!plainText(p.content))return false;  // 빈글 제외
-      return new Date(p.created_at).getTime()>week;
-    })
-    .sort((a,b)=>((S.likeCounts[b.id]||0)*2+b.comments.length)-((S.likeCounts[a.id]||0)*2+a.comments.length))
-    .slice(0,5);
-}
-
-// 친구
-async function sendFriendReq(nick){if(!S.me){openAuth();return}try{await sb.from('friend_requests').insert({from_nick:S.me,to_nick:nick});toast('친구 요청을 보냈어요!');await loadAll()}catch(e){toast('이미 보냈거나 실패')}}
-async function acceptFriend(id){try{await sb.from('friend_requests').update({status:'accepted'}).eq('id',id);toast('친구가 되었어요!');await loadAll()}catch(e){toast('실패')}}
-async function rejectFriend(id){try{await sb.from('friend_requests').update({status:'rejected'}).eq('id',id);await loadAll()}catch(e){}}
-// DM
-async function sendDM(){
-  if(!S.me){toast('로그인 필요');return}
-  const inp=document.getElementById('dm-inp');
-  const msg=inp?.value.trim()||'';
-  const hasImg=!!S._dmImg;
-  if(!msg&&!hasImg)return;
-  if(inp)inp.value='';
-  const row={from_nick:S.me,to_nick:S.dmTarget,content:msg||''};
-  if(_dmReplyTo){row.reply_to=_dmReplyTo.id;_dmReplyTo=null;}
-  S._dmImg=null;
-  try{
-    await sb.from('direct_messages').insert(row);
+async function uploadPostImages(){
+  const uploaded=[];
+  for(const item of pImgs){
+    if(typeof item==='string'){uploaded.push(item);continue}
     try{
-      if(S.dmTarget!==S.me)await sb.from('notifications').insert({to_nick:S.dmTarget,from_nick:S.me,type:'dm',message:`<b>${esc(S.me)}</b>님이 메시지를 보냈어요`});
-    }catch(_){}
-    await loadAll();
-    setTimeout(()=>{const el=document.getElementById('dm-msgs');if(el)el.scrollTo({top:el.scrollHeight,behavior:'smooth'})},100);
-  }catch(e){
-    console.error('sendDM 에러:',e);
-    toast('전송 실패: '+e.message);
+      const path=`posts/${S.me||'anon'}/${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`;
+      uploaded.push(await uploadToStorage(item.file,'chat-images',path));
+    }catch(e){toast('이미지 업로드 실패')}
   }
+  return uploaded;
 }
-async function deleteDM(id){
-  if(!confirm('메시지를 삭제할까요?'))return;
-  try{await sb.from('direct_messages').update({deleted:true,content:''}).eq('id',id).eq('from_nick',S.me);toast('삭제됨');await loadAll()}catch(e){toast('실패')}
-}
-function dmAttachImg(inp){
-  const f=inp.files[0];if(!f||f.size>2*1024*1024){toast('2MB 이하만 가능');return}
-  const r=new FileReader();r.onload=e=>{S._dmImg=e.target.result;toast('이미지 첨부됨 — 전송 버튼을 누르세요');inp.value=''};r.readAsDataURL(f);
-}
-// 채팅
-async function sendChat(chId){
-  const inp=document.getElementById('chat-inp');if(!inp||!inp.value.trim())return;
-  const msg=inp.value.trim();inp.value='';
-  // 채팅은 익명X, 항상 로그인 닉네임 (익명 원하면 따로 토글)
-  const title=chatReplyTo?'reply:'+chatReplyTo.id:'';chatReplyTo=null;
-  const row={channel_id:chId,forest_id:S.forest,author:S.me||null,anon_nick:S.me?null:anonNick(),title,content:msg,tags:[],imgs:[],files:[]};
-  try{
-    await sb.from('posts').insert(row);await loadAll();
-    setTimeout(()=>{const el=document.getElementById('chat-msgs');if(el)el.scrollTo({top:el.scrollHeight,behavior:'smooth'})},100);
-  }catch(e){toast('전송 실패')}
-}
+window.uploadToStorage=uploadToStorage;window.uploadPostImages=uploadPostImages;
 
-// ═══ MODALS ═══
-function modal(h){const o=document.createElement('div');o.className='overlay';o.id='ov';o.onclick=e=>{if(e.target===o)closeM()};o.innerHTML=`<div class="modal">${h}</div>`;document.body.appendChild(o);document.getElementById('root')?.classList.add('blurred')}
-function _setModalContent(h){let o=document.getElementById('ov');if(o){o.querySelector('.modal').innerHTML=h}else{modal(h)}}
-function closeM(){hideToolbar();document.getElementById('ov')?.remove();document.getElementById('root')?.classList.remove('blurred')}
-function toast(m,type='success'){
-  // 기존 토스트 위로 밀어올리기
-  document.querySelectorAll('.toast').forEach(t=>{
-    const bot=parseInt(t.style.bottom||'28');
-    t.style.bottom=(bot+52)+'px';t.style.transition='bottom .2s ease';
-  });
-  const icons={success:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="toast-icon"><path d="M20 6 9 17l-5-5"/></svg>',error:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="toast-icon"><path d="M18 6 6 18M6 6l12 12"/></svg>',info:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="toast-icon"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>',warn:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="toast-icon"><path d="M12 9v4m0 4h.01M10.3 3.6 2 20h20L13.7 3.6a2 2 0 0 0-3.4 0z"/></svg>'};
-  // 메시지에서 타입 자동 감지
-  if(m.includes('실패')||m.includes('오류')||m.includes('틀려'))type='error';
-  else if(m.includes('⚠️')||m.includes('주의'))type='warn';
-  else if(m.startsWith('ℹ️')||m.includes('이미'))type='info';
-  const t=document.createElement('div');
-  t.className=`toast ${type!=='success'?type:''}`;
-  t.style.bottom='28px';
-  t.innerHTML=(icons[type]||icons.success)+`<span>${m}</span>`;
-  document.body.appendChild(t);
-  setTimeout(()=>{t.style.animation='toastOut .25s ease forwards';setTimeout(()=>t.remove(),250)},2400);
+let pImgs=[],pFiles=[],composeForestId='free',composeChId=null;
+function drawPreview(){
+  const el=document.getElementById('c-preview');if(!el)return;
+  el.innerHTML=pImgs.map((item,i)=>{
+    const url=typeof item==='string'?item:item.url;
+    return `<div style="position:relative;display:inline-block;margin:4px"><img src="${url}" style="width:80px;height:80px;object-fit:cover;border-radius:8px"><button onclick="pImgs.splice(${i},1);drawPreview()" style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center">×</button></div>`;
+  }).join('');
 }
-
-let pImgs=[],pFiles=[];
-let composeForestId='free',composeChId=null;
-function openCompose(){
-  pImgs=[];pFiles=[];S.composeAnon=!S.me;S._composePoll=null;S._scheduleTime=null;S._postVisibility='public';
-  composeForestId=S.forest||'free';
-  const curF=S.forests[composeForestId];
-  const postChs=curF?curF.channels.filter(c=>c.type==='post'):[];
-  composeChId=S.channel&&postChs.find(c=>c.id===S.channel)?S.channel:(postChs[0]?.id||null);
-  const as=S.me?`<div class="compose-as"><div class="a"><img src="${avatarOf(S.me)}"></div><div><div style="font-weight:600">${esc(S.me)}</div><div style="font-size:12px;color:var(--text3)" id="anon-hint">공개로 게시</div></div><div class="switch-row">익명 <div class="switch" id="anon-sw" onclick="toggleAnon()"></div></div></div>`:`<div class="compose-as"><div class="a anon">${ic('user','sm')}</div><div style="font-weight:600">익명</div></div>`;
-  const draftKeys=Object.keys(loadDrafts());
-  const draftBadge=draftKeys.length?`<button class="draft-indicator" onclick="openDrafts()" style="cursor:pointer">${ic('file','xs')} 임시저장 ${draftKeys.length}개</button>`:'';
-  modal(`<div class="modal-head"><h2>새 게시물</h2><div style="display:flex;gap:6px;align-items:center">${draftBadge}<button class="modal-x" onclick="closeM()">${ic('x','sm')}</button></div></div>
-  <div class="modal-body">
-    ${as}
-    <div class="mfield"><label>숲</label><div class="dropdown" id="dd-forest"><div class="dd-trigger" onclick="toggleDD('dd-forest')"><span id="dd-forest-label"></span><span style="margin-left:auto;color:var(--text3)">${ic('chevDown','xs')}</span></div><div class="dd-menu" id="dd-forest-menu"></div></div></div>
-    <div class="mfield"><label>채널</label><div class="dropdown" id="dd-ch"><div class="dd-trigger" onclick="toggleDD('dd-ch')"><span id="dd-ch-label"></span><span style="margin-left:auto;color:var(--text3)">${ic('chevDown','xs')}</span></div><div class="dd-menu" id="dd-ch-menu"></div></div></div>
-    <div class="mfield"><label>제목</label><input class="inp" id="c-title" placeholder="제목을 입력하세요" maxlength="60"></div>
-    <div class="mfield"><label>내용</label><div class="editor" id="editor" contenteditable="true" data-ph="내용을 작성하세요. @닉네임 으로 멘션 가능!"></div>
-      <div class="fmt-tools">
-        <button class="fmt-btn" onclick="rich('bold')" style="font-weight:800">B</button>
-        <button class="fmt-btn" onclick="rich('italic')" style="font-style:italic">I</button>
-        <button class="fmt-btn" onclick="rich('underline')" style="text-decoration:underline">U</button>
-        <button class="fmt-btn" onclick="rich('strike')" style="text-decoration:line-through">S</button>
-        <div class="attach-bar">
-          <button onclick="document.getElementById('img-in').click()" title="이미지">${ic('image','sm')}</button>
-          <button onclick="document.getElementById('file-in').click()" title="파일">${ic('file','sm')}</button>
-          <button onclick="addComposePoll()" title="투표 추가" id="poll-toggle-btn">📊</button>
-          <button onclick="openSchedulePicker()" title="예약 게시" id="schedule-btn">⏰</button>
-          <button onclick="saveDraft()" title="임시저장">💾</button>
-        </div>
-      </div>
-    </div>
-    <div id="compose-poll-wrap"></div>
-    <div id="c-preview" class="preview-grid"></div>
-    <input type="file" id="img-in" accept="image/*" multiple hidden onchange="pickImg(this)">
-    <input type="file" id="file-in" multiple hidden onchange="pickFile(this)">
-    <div class="mfield"><label>태그 (쉼표 구분)</label><input class="inp" id="c-tags" placeholder="예: 일상, 질문"></div>
-    <div class="mfield"><label>공개 범위</label>
-      <div style="display:flex;gap:6px">
-        <button class="visibility-btn" id="vis-public" onclick="setVisibility('public')" style="border-color:var(--accent);color:var(--accent)">${ic('globe','xs')} 전체</button>
-        <button class="visibility-btn" id="vis-members" onclick="setVisibility('members')">${ic('users','xs')} 멤버만</button>
-        <button class="visibility-btn" id="vis-friends" onclick="setVisibility('friends')">${ic('lock','xs')} 친구만</button>
-      </div>
-    </div>
-    <div id="schedule-display"></div>
-    <button class="btn btn-primary btn-block" onclick="submitPost()">게시하기</button>
-  </div>`);
-  renderForestDD();renderChDD();
-  setTimeout(()=>document.getElementById('c-title')?.focus(),100);
-}
-function setVisibility(v){
-  S._postVisibility=v;
-  ['public','members','friends'].forEach(k=>{
-    const btn=document.getElementById('vis-'+k);
-    if(btn){btn.style.borderColor=k===v?'var(--accent)':'var(--line)';btn.style.color=k===v?'var(--accent)':'var(--text2)'}
-  });
-}
-function addComposePoll(){
-  const w=document.getElementById('compose-poll-wrap');if(!w)return;
-  if(S._composePoll){S._composePoll=null;w.innerHTML='';return}
-  S._composePoll={question:'',options:['','']};
-  renderComposePoll();
-}
-function renderComposePoll(){
-  const w=document.getElementById('compose-poll-wrap');if(!w||!S._composePoll)return;
-  const opts=S._composePoll.options.map((o,i)=>`<div style="display:flex;gap:6px;margin-bottom:6px"><input class="inp" style="flex:1" placeholder="선택지 ${i+1}" value="${escA(o)}" oninput="S._composePoll.options[${i}]=this.value">${S._composePoll.options.length>2?`<button onclick="S._composePoll.options.splice(${i},1);renderComposePoll()" style="color:var(--like);padding:0 6px">${ic('x','xs')}</button>`:''}</div>`).join('');
-  w.innerHTML=`<div class="poll-wrap" style="margin-bottom:12px">
-    <div style="font-size:13px;font-weight:700;margin-bottom:8px">📊 투표 설정</div>
-    <input class="inp" style="margin-bottom:8px" placeholder="질문을 입력하세요" value="${escA(S._composePoll.question)}" oninput="S._composePoll.question=this.value">
-    ${opts}
-    ${S._composePoll.options.length<5?`<button onclick="S._composePoll.options.push('');renderComposePoll()" style="font-size:13px;color:var(--accent);padding:4px 0">+ 선택지 추가</button>`:''}
-  </div>`;
-}
-function renderForestDD(){
-  const label=document.getElementById('dd-forest-label');const menu=document.getElementById('dd-forest-menu');if(!label||!menu)return;
-  const f=S.forests[composeForestId];
-  label.innerHTML=f?`${f.emoji} ${esc(f.name)}`:'숲 선택';
-  menu.innerHTML=Object.values(S.forests).map(x=>`<div class="dd-opt ${x.id===composeForestId?'on':''}" onclick="pickComposeForest('${x.id}')">${x.emoji} ${esc(x.name)}</div>`).join('');
-}
-function renderChDD(){
-  const label=document.getElementById('dd-ch-label');const menu=document.getElementById('dd-ch-menu');if(!label||!menu)return;
-  const f=S.forests[composeForestId];const chs=f?f.channels.filter(c=>c.type==='post'):[];
-  if(!composeChId||!chs.find(c=>c.id===composeChId))composeChId=chs[0]?.id||null;
-  const ch=chs.find(c=>c.id===composeChId);
-  label.innerHTML=ch?`# ${esc(ch.name)}`:'<span style="color:var(--text3)">채널 없음</span>';
-  menu.innerHTML=chs.length?chs.map(c=>`<div class="dd-opt ${c.id===composeChId?'on':''}" onclick="pickComposeCh(${c.id})"># ${esc(c.name)}</div>`).join(''):'<div style="padding:12px;font-size:13px;color:var(--text3)">채널이 없어요. 숲 설정에서 추가하세요.</div>';
-}
-function pickComposeForest(id){composeForestId=id;renderForestDD();renderChDD();closeAllDD()}
-function pickComposeCh(id){composeChId=id;renderChDD();closeAllDD()}
-function toggleDD(id){const m=document.getElementById(id)?.querySelector('.dd-menu');if(!m)return;const open=m.classList.toggle('open');if(open)document.querySelectorAll('.dd-menu.open').forEach(x=>{if(x!==m)x.classList.remove('open')})}
-function closeAllDD(){document.querySelectorAll('.dd-menu.open').forEach(x=>x.classList.remove('open'))}
-function toggleAnon(){S.composeAnon=!S.composeAnon;const sw=document.getElementById('anon-sw');const h=document.getElementById('anon-hint');if(sw)sw.classList.toggle('on',S.composeAnon);if(h)h.textContent=S.composeAnon?'익명으로 게시':'공개로 게시'}
-function rich(cmd){const map={bold:'bold',italic:'italic',underline:'underline',strike:'strikeThrough'};document.execCommand(map[cmd],false,null)}
-function pickImg(inp){for(const f of inp.files){if(f.size>2*1024*1024){toast('이미지는 2MB 이하');continue}const r=new FileReader();r.onload=e=>{pImgs.push(e.target.result);drawPreview()};r.readAsDataURL(f)}}
-function pickFile(inp){for(const f of inp.files){pFiles.push({name:f.name,size:f.size});drawPreview()}}
-function drawPreview(){const el=document.getElementById('c-preview');if(!el)return;el.innerHTML=pImgs.map((s,i)=>`<div class="pv-thumb"><img src="${s}"><div class="rm" onclick="pImgs.splice(${i},1);drawPreview()">×</div></div>`).join('')+pFiles.map((f,i)=>`<div class="pcard-file" style="cursor:pointer">${ic('file','xs')} ${esc(f.name)} <span style="color:var(--like);cursor:pointer;margin-left:4px" onclick="pFiles.splice(${i},1);drawPreview()">×</span></div>`).join('')}
 async function submitPost(){
-  const ed=document.getElementById('editor');const content=sanitize(ed?ed.innerHTML:'');
-  const plain=(ed?ed.textContent:'').trim();if(!plain){toast('내용을 입력하세요');return}
-  const title=(document.getElementById('c-title')?.value||'').trim();
-  if(!title){toast('제목을 입력하세요');return}
-  const tags=(document.getElementById('c-tags')?.value||'').split(',').map(x=>x.trim()).filter(Boolean);
-  const forestId=composeForestId||'free';
-  const channelId=composeChId||null;
-  if(!channelId){toast('채널을 선택하세요. 숲 설정에서 채널을 먼저 추가해주세요.');return}
-  const forceAnon=S.composeAnon;
-  const row={channel_id:channelId,forest_id:forestId,author:forceAnon?null:S.me,anon_nick:(forceAnon||!S.me)?anonNick():null,title,content,tags,imgs:[...pImgs],files:pFiles.map(f=>({name:f.name})),visibility:S._postVisibility||'public'};
+  const ed=document.getElementById('editor');
+  const title=document.getElementById('c-title')?.value.trim()||'';
+  const content=ed?ed.innerHTML:'';
+  const tags=(document.getElementById('c-tags')?.value||'').split(',').map(t=>t.trim()).filter(Boolean);
+  const forestId=composeForestId==='free'?null:composeForestId;
+  const channelId=composeChId;
+  const forceAnon=S.composeAnon||!S.me;
+  if(!title&&!plainText(content)){toast('내용을 입력하세요');return}
+  // 이미지 Storage 업로드
+  let uploadedImgs=[];
+  if(pImgs.length){
+    toast('이미지 업로드 중...','info');
+    uploadedImgs=await uploadPostImages();
+  }
+  const row={channel_id:channelId,forest_id:forestId,author:forceAnon?null:S.me,anon_nick:(forceAnon||!S.me)?anonNick():null,title,content,tags,imgs:uploadedImgs,files:pFiles.map(f=>({name:f.name})),visibility:S._postVisibility||'public'};
   if(S._composePoll&&S._composePoll.question&&S._composePoll.options.filter(Boolean).length>=2){
     row.poll={question:S._composePoll.question,options:S._composePoll.options.filter(Boolean)};
   }
@@ -2494,421 +1722,50 @@ async function submitPost(){
   closeM();
   try{
     await sb.from('posts').insert(row);pImgs=[];pFiles=[];
-    toast(S._scheduleTime?`${new Date(S._scheduleTime).toLocaleString('ko')}에 게시 예약됨`:'게시됨!');
+    toast(S._scheduleTime?`예약 게시됨`:'게시됐어요!');
     S._scheduleTime=null;S._composePoll=null;
-    await loadAll()
-  }
-  catch(e){console.error(e);toast('게시 실패')}
+    await loadAll();
+  }catch(e){console.error(e);toast('게시 실패')}
 }
+function pickFile(inp){for(const f of inp.files){pFiles.push(f);toast(`파일 첨부됨: ${f.name}`)}}
 
-function openAuth(){modal(`<div class="modal-head"><h2>로그인</h2><button class="modal-x" onclick="closeM()">${ic('x','sm')}</button></div><div class="modal-body"><p style="font-size:14px;color:var(--text2);margin-bottom:16px">로그인하면 팔로우·친구·DM·나만의 숲을 쓸 수 있어요. 로그인 없이도 익명 글쓰기는 가능해요.</p><div class="mfield"><label>닉네임</label><input class="inp" id="a-nick" placeholder="닉네임" onkeydown="if(event.key==='Enter')doAuth()"></div><div class="mfield"><label>비밀번호</label><input class="inp" id="a-pw" type="password" placeholder="비밀번호" onkeydown="if(event.key==='Enter')doAuth()"></div><button class="btn btn-primary btn-block" onclick="doAuth()">시작하기</button><p style="font-size:12px;color:var(--text3);text-align:center;margin-top:10px">처음이면 자동 가입돼요</p></div>`);setTimeout(()=>document.getElementById('a-nick')?.focus(),100)}
-async function doAuth(){const nick=document.getElementById('a-nick')?.value.trim();const pw=document.getElementById('a-pw')?.value;if(!nick||!pw){toast('닉네임과 비밀번호를 입력하세요');return}try{const{data:ex}=await sb.from('profiles').select('nick,pw').eq('nick',nick).maybeSingle();if(ex){if(ex.pw!==pw){toast('비밀번호가 틀려요');return}}else{await sb.from('profiles').insert({nick,pw})}S.me=nick;saveSes();closeM();toast(`${nick}님 환영해요!`);await loadAll()}catch(e){toast('로그인 실패')}}
-function openEditProfile(){
-  const u=S.users[S.me];
-  const bannerBg=u?.banner?`url(${u.banner}) center/cover`:`linear-gradient(120deg,var(--accent),var(--violet))`;
-  modal(`<div class="modal-head"><h2>프로필 편집</h2><button class="modal-x" onclick="closeM()">${ic('x','sm')}</button></div>
-  <div class="modal-body" style="padding:0">
-    <!-- 배너 -->
-    <div style="position:relative;height:110px;background:${bannerBg};cursor:pointer;overflow:hidden;flex-shrink:0;background-size:cover" onclick="document.getElementById('prof-banner-in').click()">
-      <div style="position:absolute;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;opacity:0;transition:.2s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
-        <span style="color:#fff;font-size:13px;font-weight:700">${ic('image','sm')} 배너 변경</span>
-      </div>
-      <span id="prof-banner-preview"></span>
-    </div>
-    <input type="file" id="prof-banner-in" accept="image/*" hidden onchange="uploadBanner(this)">
-    <!-- 아이콘 — 배너에 겹치게 -->
-    <div style="position:relative;height:32px">
-      <div style="position:absolute;left:20px;top:-34px;width:68px;height:68px;border-radius:50%;border:4px solid var(--card);background:var(--card2);overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.25)" onclick="document.getElementById('av-in').click()">
-        <img id="edit-av" src="${avatarOf(S.me)}" style="width:100%;height:100%;object-fit:cover">
-        <div style="position:absolute;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;opacity:0;transition:.15s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">${ic('image','xs')}</div>
-      </div>
-    </div>
-    <input type="file" id="av-in" accept="image/*" hidden onchange="uploadAvatar(this)">
-    <div style="padding:6px 20px 20px">
-      <div style="font-weight:700;font-size:15px;margin-bottom:2px">${esc(S.me)}</div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:16px">아이콘 · 배너 클릭해서 변경</div>
-      <div class="mfield"><label>소개</label><input class="inp" id="edit-bio" value="${escA(u?.bio||'')}" placeholder="한줄 소개"></div>
-      <button class="btn btn-primary btn-block" onclick="saveProfile()">저장</button>
-      <button class="btn btn-block" style="margin-top:8px;color:var(--like);border:1px solid var(--like);background:transparent" onclick="logout()">로그아웃</button>
-    </div>
-  </div>`);
-}
-let pendingAv=null,pendingBanner=null;
-function uploadAvatar(inp){const f=inp.files[0];if(!f||f.size>500*1024){toast('500KB 이하');return}const r=new FileReader();r.onload=e=>{pendingAv=e.target.result;document.getElementById('edit-av').src=pendingAv};r.readAsDataURL(f)}
-function uploadBanner(inp){
-  const f=inp.files[0];if(!f||f.size>1024*1024){toast('1MB 이하');return}
-  const r=new FileReader();r.onload=e=>{
-    pendingBanner=e.target.result;
-    // 미리보기
-    const wrap=document.querySelector('[onclick="document.getElementById(\'prof-banner-in\').click()"]');
-    if(wrap)wrap.style.background=`url(${pendingBanner}) center/cover`;
-  };r.readAsDataURL(f);
-}
-async function saveProfile(){
-  const bio=document.getElementById('edit-bio')?.value.trim()||'';
-  const patch={bio};
-  if(pendingAv)patch.avatar=pendingAv;
-  if(pendingBanner)patch.banner=pendingBanner;
+async function saveForest(id){
+  const name=document.getElementById('fs-name')?.value.trim();
+  const desc=document.getElementById('fs-desc')?.value.trim()||'';
+  const f=S.forests[id];const color=document.getElementById('fs-color')?.value;
+  const patch={name,description:desc,emoji:f?.emoji||'🎋',color};
   try{
-    await sb.from('profiles').update(patch).eq('nick',S.me);
-    pendingAv=null;pendingBanner=null;
+    if(editForestIcon instanceof File){
+      toast('아이콘 업로드 중...','info');
+      patch.icon=await uploadToStorage(editForestIcon,'forests',`${id}/icon.jpg`);
+    }else if(editForestIcon){patch.icon=editForestIcon}
+    if(editForestBanner instanceof File){
+      toast('배너 업로드 중...','info');
+      patch.banner=await uploadToStorage(editForestBanner,'forests',`${id}/banner.jpg`);
+    }else if(editForestBanner){patch.banner=editForestBanner}
+    await sb.from('forests').update(patch).eq('id',id);
     closeM();toast('저장됨!');await loadAll();
-  }catch(e){toast('실패')}
+  }catch(e){toast('실패: '+e.message)}
 }
-function logout(){S.me=null;saveSes();closeM();toast('로그아웃됨');loadAll()}
-function openSettings(){openEditProfile()}
-
-// 숲 생성
-let newForestIcon='',newForestBanner='',nfStep=1,nfColor='#4a6cf7',nfEmoji='🎋',nfName='';
-const NF_COLORS=['#4a6cf7','#8b5cf6','#ec4899','#ef4444','#f59e0b','#22c55e','#06b6d4','#64748b'];
-const NF_TEMPLATES=[
-  {emoji:'🎮',name:'게임',desc:'같이 게임해요!'},
-  {emoji:'🎨',name:'창작',desc:'그림, 글쓰기, 음악 등'},
-  {emoji:'📚',name:'스터디',desc:'함께 공부해요'},
-  {emoji:'🍕',name:'맛집',desc:'먹부림 성지'},
-  {emoji:'💬',name:'잡담',desc:'편하게 이야기해요'},
-  {emoji:'🌿',name:'일상',desc:'하루하루 기록'},
-];
-function pickNfTemplate(emoji,name){nfEmoji=emoji;nfName=name;nfStep=2;_renderCreateForest()}
-function pickNfStep(step){nfStep=step;_renderCreateForest()}
-function pickNfColor(c){nfColor=c;document.querySelectorAll('.nf-palette-dot').forEach(el=>{const dc=el.dataset.color;el.style.border=dc===c?'3px solid var(--text)':'3px solid transparent';el.style.transform=dc===c?'scale(1.15)':'scale(1)'});const iconCircle=document.getElementById('nf-icon-circle');if(iconCircle){iconCircle.style.background=c+'18';iconCircle.style.borderColor=c;}const makeBtn=document.getElementById('nf-make-btn');if(makeBtn)makeBtn.style.background=c;}
-function pickNfEmoji(v){nfEmoji=v||'🎋';const el=document.getElementById('nf-emoji2');if(el)el.textContent=nfEmoji}
-
-// ═══ 커스텀 컬러피커 ═══
-// ─── 색상 변환 유틸 (전역) ───
-function hexToHsv(hex){
-  hex=(hex||'').replace('#','');
-  if(hex.length!==6)return{h:0,s:1,v:1};
-  const r=parseInt(hex.slice(0,2),16)/255,g=parseInt(hex.slice(2,4),16)/255,b=parseInt(hex.slice(4,6),16)/255;
-  const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;
-  let h=0;
-  if(d){if(max===r)h=((g-b)/d)%6;else if(max===g)h=(b-r)/d+2;else h=(r-g)/d+4;h=((h*60)+360)%360}
-  return{h,s:max?d/max:0,v:max};
-}
-function hsvToHex(h,s,v){
-  const f=n=>{const k=(n+h/60)%6;return v-v*s*Math.max(0,Math.min(k,4-k,1))};
-  return '#'+[f(5),f(3),f(1)].map(x=>Math.round(x*255).toString(16).padStart(2,'0')).join('');
-}
-function openNfColorPicker(){
-  if(document.getElementById('nf-cpicker'))return;
-  const swatch=document.getElementById('nf-color-swatch');
-  if(!swatch)return;
-  const rect=swatch.getBoundingClientRect();
-
-  const pop=document.createElement('div');
-  pop.id='nf-cpicker';
-  pop.style.cssText=`position:fixed;z-index:9999;background:var(--card);border:1px solid var(--line2);border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.18);padding:14px;width:240px;top:${Math.min(rect.bottom+8, window.innerHeight-300)}px;left:${Math.min(rect.left, window.innerWidth-250)}px;user-select:none`;
-
-  pop.innerHTML=`
-    <canvas id="nf-cp-canvas" width="212" height="140" style="width:212px;height:140px;border-radius:10px;cursor:crosshair;display:block"></canvas>
-    <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
-      <canvas id="nf-cp-hue" width="180" height="16" style="width:180px;height:16px;border-radius:8px;cursor:pointer;flex:1"></canvas>
-      <div id="nf-cp-preview" style="width:28px;height:28px;border-radius:50%;border:2px solid var(--line2);flex-shrink:0"></div>
-    </div>
-    <div style="margin-top:8px;display:flex;align-items:center;gap:6px">
-      <span style="font-size:12px;color:var(--text3)">#</span>
-      <input id="nf-cp-hex" maxlength="6" style="flex:1;background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-size:13px;font-family:monospace;color:var(--text);outline:none" oninput="nfCpHexInput(this.value)">
-      <button onclick="closeNfColorPicker(true)" style="padding:5px 12px;border-radius:8px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;border:none">확인</button>
-    </div>`;
-
-  document.body.appendChild(pop);
-
-  // State
-  let hue=0, sat=1, val=1, cpDragging=false, hueDragging=false;
-
-  // Parse current color
-  const parsed=hexToHsv(nfColor);
-  hue=parsed.h; sat=parsed.s; val=parsed.v;
-
-  // Draw spectrum canvas
-  const cv=document.getElementById('nf-cp-canvas');
-  const ctx=cv.getContext('2d');
-  function drawSpectrum(){
-    const W=cv.width,H=cv.height;
-    const hGrad=ctx.createLinearGradient(0,0,W,0);
-    hGrad.addColorStop(0,'#fff');
-    hGrad.addColorStop(1,`hsl(${hue},100%,50%)`);
-    ctx.fillStyle=hGrad; ctx.fillRect(0,0,W,H);
-    const vGrad=ctx.createLinearGradient(0,0,0,H);
-    vGrad.addColorStop(0,'rgba(0,0,0,0)');
-    vGrad.addColorStop(1,'#000');
-    ctx.fillStyle=vGrad; ctx.fillRect(0,0,W,H);
-    // cursor
-    const cx=sat*W, cy=(1-val)*H;
-    ctx.beginPath(); ctx.arc(cx,cy,7,0,Math.PI*2);
-    ctx.strokeStyle='#fff'; ctx.lineWidth=2.5; ctx.stroke();
-    ctx.beginPath(); ctx.arc(cx,cy,5,0,Math.PI*2);
-    ctx.strokeStyle='rgba(0,0,0,0.4)'; ctx.lineWidth=1.5; ctx.stroke();
-  }
-
-  // Draw hue slider
-  const hc=document.getElementById('nf-cp-hue');
-  const hctx=hc.getContext('2d');
-  function drawHue(){
-    const grad=hctx.createLinearGradient(0,0,hc.width,0);
-    for(let i=0;i<=6;i++)grad.addColorStop(i/6,`hsl(${i*60},100%,50%)`);
-    hctx.fillStyle=grad; hctx.fillRect(0,0,hc.width,hc.height);
-  }
-
-  function updatePreview(){
-    const hex=hsvToHex(hue,sat,val);
-    document.getElementById('nf-cp-preview').style.background=hex;
-    const hi=document.getElementById('nf-cp-hex');
-    if(hi&&document.activeElement!==hi)hi.value=hex.replace('#','');
-  }
-
-  drawSpectrum(); drawHue(); updatePreview();
-
-  // Spectrum mouse events
-  function pickSpectrum(e){
-    const r=cv.getBoundingClientRect();
-    sat=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
-    val=Math.max(0,Math.min(1,1-(e.clientY-r.top)/r.height));
-    drawSpectrum(); updatePreview();
-  }
-  cv.onmousedown=e=>{cpDragging=true;pickSpectrum(e);e.preventDefault()};
-  cv.ontouchstart=e=>{cpDragging=true;pickSpectrum(e.touches[0]);e.preventDefault()};
-
-  // Hue slider
-  function pickHue(e){
-    const r=hc.getBoundingClientRect();
-    hue=Math.max(0,Math.min(360,((e.clientX-r.left)/r.width)*360));
-    drawSpectrum(); updatePreview();
-  }
-  hc.onmousedown=e=>{hueDragging=true;pickHue(e);e.preventDefault()};
-  hc.ontouchstart=e=>{hueDragging=true;pickHue(e.touches[0]);e.preventDefault()};
-
-  document.addEventListener('mousemove',function onMove(e){
-    if(cpDragging)pickSpectrum(e);
-    else if(hueDragging)pickHue(e);
-  });
-  document.addEventListener('mouseup',function onUp(){cpDragging=false;hueDragging=false});
-  document.addEventListener('touchmove',function onTM(e){
-    if(cpDragging)pickSpectrum(e.touches[0]);
-    else if(hueDragging)pickHue(e.touches[0]);
-    e.preventDefault();
-  },{passive:false});
-  document.addEventListener('touchend',function onTE(){cpDragging=false;hueDragging=false});
-
-  // Hex input handler
-  window.nfCpHexInput=function(v){
-    if(v.length===6){const p=hexToHsv(v);hue=p.h;sat=p.s;val=p.v;drawSpectrum();updatePreview();}
-  };
-
-  let _cpOutsideClick=null;
-
-  window.closeNfColorPicker=function(apply){
-    if(apply){const hex=hsvToHex(hue,sat,val);pickNfColor(hex);}
-    pop.remove();
-    if(_cpOutsideClick)document.removeEventListener('mousedown',_cpOutsideClick);
-  };
-
-  // Close on outside click
-  setTimeout(()=>{
-    _cpOutsideClick=function(e){if(!pop.contains(e.target)&&e.target!==swatch){closeNfColorPicker(false)}};
-    document.addEventListener('mousedown',_cpOutsideClick);
-  },100);
-}
-
-function openCreateForest(){
+async function createForest(){
+  const name=nfName||document.getElementById('nf-name')?.value.trim();
+  if(!name){toast('숲 이름을 입력하세요');return}
   if(!S.me){toast('로그인 필요');openAuth();return}
-  newForestIcon='';newForestBanner='';nfStep=1;nfColor='#4a6cf7';nfEmoji='🎋';nfName='';
-  _renderCreateForest();
-}
-function _renderCreateForest(){
-  // 기존 모달 내용만 교체 (이벤트 버블링으로 인한 닫힘 방지 — _setModalContent 사용)
-  const colorPalette=NF_COLORS.map(c=>`<div class="nf-palette-dot" data-color="${c}" onclick="pickNfColor('${c}')" style="width:30px;height:30px;border-radius:50%;background:${c};cursor:pointer;transition:.15s;border:3px solid ${nfColor===c?'var(--text)':'transparent'};transform:${nfColor===c?'scale(1.15)':'scale(1)'}"></div>`).join('');
-  if(nfStep===1){
-    const tplHtml=NF_TEMPLATES.map(t=>`<div onclick="pickNfTemplate('${t.emoji}','${t.name}')" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);cursor:pointer;transition:.15s;background:var(--card2)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background='var(--card2)'"><span style="font-size:24px">${t.emoji}</span><div><div style="font-weight:600;font-size:14px">${t.name}</div><div style="font-size:12px;color:var(--text3)">${t.desc}</div></div><span style="margin-left:auto;color:var(--text3)">${ic('chevRight','xs')}</span></div>`).join('');
-    _setModalContent(`<div style="text-align:center;padding:28px 24px 0">
-      <div style="font-size:32px;margin-bottom:10px">🎋</div>
-      <h2 style="font-size:20px;font-weight:800;margin-bottom:6px">새 대나무숲 만들기</h2>
-      <p style="font-size:13.5px;color:var(--text3);line-height:1.5">대나무숲은 나만의 공간이에요.<br>친구들과 함께 이야기를 나눠보세요!</p>
-    </div>
-    <div style="padding:20px 24px 28px">
-      <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">템플릿으로 시작하기</div>
-      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">${tplHtml}</div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-secondary" style="flex:1" onclick="closeM()">취소</button>
-        <button class="btn btn-primary" style="flex:2" onclick="pickNfStep(2)">직접 만들기 →</button>
-      </div>
-    </div>`);
-  } else {
-    const iconInner=newForestIcon
-      ?`<img src="${newForestIcon}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
-      :`<div style="color:var(--text3)">${ic('image')}</div>`;
-    const previewName=nfName||'숲 이름';
-    _setModalContent(`<div class="modal-head"><h2>새 대나무숲 만들기</h2><button class="modal-x" onclick="closeM()">${ic('x','sm')}</button></div>
-    <div style="padding:20px 24px 24px">
-      <div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:20px">
-        <div style="display:flex;flex-direction:column;align-items:center;gap:8px;flex-shrink:0">
-          <div id="nf-icon-circle" onclick="document.getElementById('nf-icon-in').click()" style="width:80px;height:80px;border-radius:50%;background:${nfColor}18;border:2.5px solid ${nfColor};display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;overflow:hidden;transition:.2s" onmouseover="this.querySelector('.icon-hover-tip')&&(this.querySelector('.icon-hover-tip').style.opacity=1)" onmouseout="this.querySelector('.icon-hover-tip')&&(this.querySelector('.icon-hover-tip').style.opacity=0)">
-            ${iconInner}
-            <div class="icon-hover-tip" style="position:absolute;inset:0;background:rgba(0,0,0,0.4);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;opacity:0;transition:.2s">변경</div>
-          </div>
-          <span style="font-size:11px;color:var(--text3)">아이콘</span>
-          <input type="file" id="nf-icon-in" accept="image/*" hidden onchange="previewForestIcon(this)">
-        </div>
-        <div style="flex:1;background:var(--card2);border:1px solid var(--line);border-radius:14px;overflow:hidden">
-          <div style="height:52px;background:${newForestBanner?`url(${newForestBanner}) center/cover`:`linear-gradient(135deg,${nfColor}55,${nfColor}22)`};position:relative">
-            <div style="position:absolute;bottom:-20px;left:12px;width:40px;height:40px;border-radius:50%;border:3px solid var(--card2);overflow:hidden;background:${nfColor}33;display:flex;align-items:center;justify-content:center">
-              ${newForestIcon?`<img src="${newForestIcon}" style="width:100%;height:100%;object-fit:cover">`:`<div style="color:${nfColor};font-size:13px">${ic('image','xs')}</div>`}
-            </div>
-          </div>
-          <div style="padding:26px 12px 12px">
-            <div style="font-weight:700;font-size:14px;color:var(--text)">${previewName}</div>
-            <div style="font-size:11.5px;color:var(--text3);margin-top:2px">${document.getElementById?.('nf-desc')?.value||'한 줄 소개'}</div>
-          </div>
-        </div>
-      </div>
-      <div class="mfield">
-        <label>숲 이름 <span style="color:var(--like)">*</span></label>
-        <input class="inp" id="nf-name" placeholder="어떤 숲인가요?" maxlength="20" style="font-size:15px;font-weight:600" value="${escA(nfName)}" oninput="nfName=this.value;this.style.borderColor='var(--accent)'">
-      </div>
-      <div class="mfield">
-        <label>소개</label>
-        <input class="inp" id="nf-desc" placeholder="한 줄 소개 (선택)" maxlength="60">
-      </div>
-      <div class="mfield">
-        <label>테마 색상</label>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${colorPalette}<div id="nf-color-swatch" onclick="openNfColorPicker()" style="width:30px;height:30px;border-radius:50%;background:${nfColor};cursor:pointer;border:2px solid var(--line2);flex-shrink:0;transition:.15s" title="직접 선택"></div></div>
-      </div>
-      <div class="mfield">
-        <label>배너 이미지 <span style="font-size:11px;color:var(--text3)">(선택)</span></label>
-        <div onclick="document.getElementById('nf-banner-in').click()" style="width:100%;height:60px;border-radius:12px;border:2px dashed var(--line2);background:${newForestBanner?`url(${newForestBanner}) center/cover`:'var(--card2)'};display:flex;align-items:center;justify-content:center;cursor:pointer;transition:.15s;color:var(--text3);font-size:13px;gap:6px" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--line2)'">${newForestBanner?'':`${ic('image','sm')} 배너 업로드`}</div>
-        <input type="file" id="nf-banner-in" accept="image/*" hidden onchange="previewForestBanner(this)">
-      </div>
-      <div style="display:flex;gap:8px;margin-top:4px">
-        <button class="btn btn-secondary" style="flex:1" onclick="pickNfStep(1)">← 뒤로</button>
-        <button id="nf-make-btn" class="btn btn-primary" style="flex:2;background:${nfColor}" onclick="createForest()">🎋 숲 만들기</button>
-      </div>
-    </div>`);
-    setTimeout(()=>document.getElementById('nf-name')?.focus(),100);
-  }
-}
-function previewForestIcon(inp){const f=inp.files[0];if(!f)return;if(f.size>500*1024){toast('500KB 이하만 가능해요');return}const r=new FileReader();r.onload=e=>{newForestIcon=e.target.result;_renderCreateForest()};r.readAsDataURL(f)}
-function previewForestBanner(inp){const f=inp.files[0];if(!f)return;if(f.size>500*1024){toast('500KB 이하만 가능해요');return}const r=new FileReader();r.onload=e=>{newForestBanner=e.target.result;_renderCreateForest()};r.readAsDataURL(f)}
-async function createForest(){const name=document.getElementById('nf-name')?.value.trim();if(!name){toast('이름을 입력하세요');return}if(!newForestIcon){toast('숲 아이콘 사진을 업로드해주세요');return}const desc=document.getElementById('nf-desc')?.value.trim()||'';const emoji=nfEmoji||'🎋';const color=nfColor||document.getElementById('nf-color')?.value||'#4a6cf7';const id='c_'+Math.random().toString(36).slice(2,8);const row={id,name,emoji,description:desc,color,owner:S.me,icon:newForestIcon};if(newForestBanner)row.banner=newForestBanner;try{await sb.from('forests').insert(row);await sb.from('forest_members').insert({forest_id:id,nick:S.me,role:'owner'});await sb.from('channels').insert([{forest_id:id,name:'잡담',type:'post',position:0},{forest_id:id,name:'채팅',type:'chat',position:1}]);closeM();toast('숲이 만들어졌어요!');await loadAll();goForest(id)}catch(e){console.error(e);toast('생성 실패')}}
-let editForestIcon='',editForestBanner='';
-function openForestEditModal(id){
-  const f=S.forests[id];if(!f)return;editForestIcon='';editForestBanner='';
-  const iconPreview=f.icon?`<img src="${f.icon}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:`<span style="font-size:28px">${f.emoji}</span>`;
-  const bannerBg=f.banner?`url(${f.banner}) center/cover`:`linear-gradient(135deg,${f.color}cc,${f.color}44)`;
-  const palette=['#4a6cf7','#ef4444','#f59e0b','#22c55e','#8b5cf6','#ec4899','#06b6d4','#f97316','#14b8a6','#6366f1','#a855f7','#84cc16'];
-  const colorSwatches=palette.map(c=>`<div onclick="fsPick('${c}',event)" class="cswatch" style="width:32px;height:32px;border-radius:10px;background:${c};cursor:pointer;transition:.15s;border:2px solid transparent;outline:${f.color===c?'3px solid var(--text)':'2px solid transparent'};outline-offset:2px"></div>`).join('');
-  modal(`
-  <div class="modal-head"><h2>⚙️ ${esc(f.name)} 설정</h2><button class="modal-x" onclick="closeM()">${ic('x','sm')}</button></div>
-  <div class="modal-body" style="padding:0">
-    <div style="position:relative;height:130px;background:${bannerBg};cursor:pointer;overflow:hidden;flex-shrink:0" onclick="document.getElementById('fs-banner-in').click()">
-      <div style="position:absolute;inset:0;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;opacity:0;transition:.2s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
-        <span style="color:#fff;font-size:13px;font-weight:700">🖼 배너 변경</span>
-      </div><span id="fs-banner-preview"></span>
-    </div>
-    <input type="file" id="fs-banner-in" accept="image/*" hidden onchange="previewEditBanner(this)">
-    <!-- 아이콘 — 배너에 겹치게 (Discord 스타일) -->
-    <div style="position:relative;height:36px">
-      <div style="position:absolute;left:20px;top:-36px;width:72px;height:72px;border-radius:50%;border:4px solid var(--card);background:var(--card2);overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.25)" onclick="document.getElementById('fs-icon-in').click()">
-        <span id="fs-icon-preview">${iconPreview}</span>
-      </div>
-    </div>
-    <div style="padding:4px 20px 0;display:flex;align-items:center;gap:10px;margin-left:84px;min-height:28px">
-      <span style="font-size:12px;color:var(--text3)">아이콘 클릭해서 변경</span>
-    </div>
-    <input type="file" id="fs-icon-in" accept="image/*" hidden onchange="previewEditIcon(this)">
-    <div style="padding:14px 20px 20px">
-      <div class="mfield"><label>숲 이름</label><input class="inp" id="fs-name" value="${escA(f.name)}" placeholder="숲 이름"></div>
-      <div class="mfield"><label>소개</label><input class="inp" id="fs-desc" value="${escA(f.description||'')}" placeholder="숲을 소개해보세요"></div>
-      <div class="mfield">
-        <label>테마 색상</label>
-        <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px" id="fs-swatches">${colorSwatches}</div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <div id="fs-color-preview" style="width:32px;height:32px;border-radius:10px;background:${f.color};cursor:pointer;flex-shrink:0;border:2px solid var(--line2)" onclick="openFsColorPicker()"></div>
-          <span style="font-size:12px;color:var(--text3)">직접 선택</span>
-          <input type="hidden" id="fs-color" value="${f.color}">
-        </div>
-      </div>
-      <button class="btn btn-primary btn-block" style="margin-top:8px" onclick="saveForest('${id}')">저장하기</button>
-      <div style="margin-top:20px;padding:16px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.25);border-radius:14px;text-align:center">
-        <div style="font-size:13px;font-weight:700;color:var(--like);margin-bottom:12px">⚠️ 위험 구역</div>
-        <button class="btn" style="background:var(--like);color:#fff;padding:10px 0;border-radius:10px;font-size:14px;font-weight:700;width:100%" onclick="if(confirm('정말 숲을 삭제할까요?'))deleteForest('${id}')">🗑️ 숲 영구 삭제</button>
-      </div>
-    </div>
-  </div>`);
-  setTimeout(()=>document.getElementById('fs-name')?.focus(),100);
-}
-function fsPick(color,e){
-  document.getElementById('fs-color').value=color;
-  document.getElementById('fs-color-preview').style.background=color;
-  document.querySelectorAll('.cswatch').forEach(s=>s.style.outline='2px solid transparent');
-  if(e&&e.currentTarget)e.currentTarget.style.outline='3px solid var(--text)';
-}
-function openFsColorPicker(){
-  if(document.getElementById('fs-cpicker'))return;
-  const swatch=document.getElementById('fs-color-preview');
-  const rect=swatch.getBoundingClientRect();
-  const pop=document.createElement('div');pop.id='fs-cpicker';
-  pop.style.cssText=`position:fixed;z-index:9999;background:var(--card);border:1px solid var(--line2);border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.2);padding:14px;width:240px;top:${Math.min(rect.bottom+8,window.innerHeight-300)}px;left:${Math.min(rect.left,window.innerWidth-250)}px`;
-  pop.innerHTML=`<canvas id="fs-cp-c" width="212" height="140" style="width:212px;height:140px;border-radius:10px;cursor:crosshair;display:block"></canvas>
-    <canvas id="fs-hue" width="212" height="16" style="width:212px;height:16px;border-radius:8px;cursor:pointer;display:block;margin-top:10px"></canvas>
-    <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
-      <div id="fs-cp-prev" style="width:32px;height:32px;border-radius:8px;flex-shrink:0;border:2px solid var(--line2)"></div>
-      <input id="fs-cp-hex" class="inp" style="flex:1;font-size:13px;padding:6px 10px" placeholder="#HEX" maxlength="7">
-      <button class="btn btn-primary" style="padding:6px 12px;font-size:13px" onclick="window._closeFsCP?.(true)">적용</button>
-    </div>`;
-  document.body.appendChild(pop);
-  let H=220,S2=0.7,V=0.9;
-  const cur=document.getElementById('fs-color').value;
-  if(cur){try{const p=hexToHsv(cur.replace('#',''));if(p){H=p.h;S2=p.s;V=p.v}}catch(e){}}
-  function drawS(){
-    const c=document.getElementById('fs-cp-c');if(!c)return;const ctx=c.getContext('2d');
-    const g1=ctx.createLinearGradient(0,0,212,0);g1.addColorStop(0,'#fff');g1.addColorStop(1,`hsl(${H},100%,50%)`);
-    ctx.fillStyle=g1;ctx.fillRect(0,0,212,140);
-    const g2=ctx.createLinearGradient(0,0,0,140);g2.addColorStop(0,'rgba(0,0,0,0)');g2.addColorStop(1,'#000');
-    ctx.fillStyle=g2;ctx.fillRect(0,0,212,140);
-    ctx.beginPath();ctx.arc(S2*212,(1-V)*140,7,0,2*Math.PI);ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
-  }
-  function drawH(){
-    const c=document.getElementById('fs-hue');if(!c)return;const ctx=c.getContext('2d');
-    const g=ctx.createLinearGradient(0,0,212,0);
-    for(let i=0;i<=360;i+=30)g.addColorStop(i/360,`hsl(${i},100%,50%)`);
-    ctx.fillStyle=g;ctx.fillRect(0,0,212,16);
-    ctx.beginPath();ctx.arc(H/360*212,8,7,0,2*Math.PI);ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
-  }
-  function upd(){const hex=hsvToHex(H,S2,V);const p=document.getElementById('fs-cp-prev');if(p)p.style.background=hex;const h=document.getElementById('fs-cp-hex');if(h)h.value=hex;}
-  drawS();drawH();upd();
-  document.getElementById('fs-cp-c')?.addEventListener('mousedown',function(e){
-    function mv(e){const r=this.getBoundingClientRect();S2=Math.max(0,Math.min(1,(e.clientX-r.left)/212));V=Math.max(0,Math.min(1,1-(e.clientY-r.top)/140));drawS();upd();}
-    mv.call(this,e);const fn=mv.bind(this);document.addEventListener('mousemove',fn);document.addEventListener('mouseup',()=>document.removeEventListener('mousemove',fn),{once:true});
-  });
-  document.getElementById('fs-hue')?.addEventListener('mousedown',function(e){
-    function mv(e){const r=this.getBoundingClientRect();H=Math.round(Math.max(0,Math.min(360,(e.clientX-r.left)/212*360)));drawS();drawH();upd();}
-    mv.call(this,e);const fn=mv.bind(this);document.addEventListener('mousemove',fn);document.addEventListener('mouseup',()=>document.removeEventListener('mousemove',fn),{once:true});
-  });
-  document.getElementById('fs-cp-hex')?.addEventListener('input',function(){
-    if(this.value.length===7){try{const p=hexToHsv(this.value.replace('#',''));if(p){H=p.h;S2=p.s;V=p.v;drawS();drawH();upd();}}catch(e){}}
-  });
-  window._closeFsCP=function(apply){
-    if(apply){const hex=hsvToHex(H,S2,V);document.getElementById('fs-color').value=hex;document.getElementById('fs-color-preview').style.background=hex;document.querySelectorAll('.cswatch').forEach(s=>s.style.outline='2px solid transparent');}
-    pop.remove();document.removeEventListener('mousedown',_out);
-    window._closeFsCP=null;
-  };
-  function _out(e){if(!pop.contains(e.target)&&e.target!==swatch)window._closeFsCP?.(false);}
-  setTimeout(()=>document.addEventListener('mousedown',_out),100);
-}
-window.fsPick=fsPick;window.openFsColorPicker=openFsColorPicker;window.closeFsCP=function(v){if(window._closeFsCP)window._closeFsCP(v);};
-async function deleteForest(id){
   try{
-    await sb.from('channels').delete().eq('forest_id',id);
-    await sb.from('forest_members').delete().eq('forest_id',id);
-    await sb.from('forests').delete().eq('id',id);
-    closeM();toast('숲이 삭제됐어요');goHome();await loadAll();
-  }catch(e){toast('삭제 실패')}
+    let iconUrl=newForestIcon,bannerUrl=newForestBanner;
+    if(newForestIcon instanceof File){toast('아이콘 업로드 중...','info');iconUrl=await uploadToStorage(newForestIcon,'forests',`new_${Date.now()}/icon.jpg`);}
+    if(newForestBanner instanceof File){toast('배너 업로드 중...','info');bannerUrl=await uploadToStorage(newForestBanner,'forests',`new_${Date.now()}/banner.jpg`);}
+    const {data:fd,error}=await sb.from('forests').insert({name,description:document.getElementById('nf-desc')?.value.trim()||'',owner:S.me,emoji:nfEmoji,color:nfColor,icon:iconUrl||'',banner:bannerUrl||''}).select().single();
+    if(error)throw error;
+    const fid=fd.id;
+    await Promise.all([
+      sb.from('channels').insert({forest_id:fid,name:'일반',type:'post',position:0}),
+      sb.from('channels').insert({forest_id:fid,name:'채팅',type:'chat',position:1}),
+      sb.from('forest_members').insert({forest_id:fid,nick:S.me,role:'owner'}),
+    ]);
+    closeM();toast('숲이 만들어졌어요! 🎋');await loadAll();goForest(fid);
+  }catch(e){toast('실패: '+e.message)}
 }
-window.deleteForest=deleteForest;
-function pickFSType(t){document.getElementById('nc-type').value=t;const p=document.getElementById('fst-post'),c=document.getElementById('fst-chat');if(p)p.className='btn '+(t==='post'?'btn-primary':'btn-secondary');if(c)c.className='btn '+(t==='chat'?'btn-primary':'btn-secondary')}
-function previewEditIcon(inp){const f=inp.files[0];if(!f)return;if(f.size>500*1024){toast('500KB 이하만');return}const r=new FileReader();r.onload=e=>{editForestIcon=e.target.result;const el=document.getElementById('fs-icon-preview');if(el)el.innerHTML=`<img src="${editForestIcon}" style="width:100%;height:100%;object-fit:cover">`};r.readAsDataURL(f)}
-function previewEditBanner(inp){const f=inp.files[0];if(!f)return;if(f.size>500*1024){toast('500KB 이하만');return}const r=new FileReader();r.onload=e=>{editForestBanner=e.target.result;const el=document.getElementById('fs-banner-preview');if(el)el.innerHTML=`<img src="${editForestBanner}" style="width:100%;height:100%;object-fit:cover">`};r.readAsDataURL(f)}
-async function saveForest(id){const name=document.getElementById('fs-name')?.value.trim();const desc=document.getElementById('fs-desc')?.value.trim()||'';const f=S.forests[id];const color=document.getElementById('fs-color')?.value;const patch={name,description:desc,emoji:f?.emoji||'🎋',color};if(editForestIcon)patch.icon=editForestIcon;if(editForestBanner)patch.banner=editForestBanner;try{await sb.from('forests').update(patch).eq('id',id);closeM();toast('저장됨');await loadAll()}catch(e){toast('실패')}}
 async function addChannel(forestId){const name=document.getElementById('nc-name')?.value.trim();const type=document.getElementById('nc-type')?.value||'post';const desc=document.getElementById('nc-desc')?.value?.trim()||'';if(!name){toast('채널 이름을 입력하세요');return}try{await sb.from('channels').insert({forest_id:forestId,name,type,description:desc,position:99});toast('채널 추가됨!');closeM();await loadAll();goForest(forestId)}catch(e){toast('채널 추가 실패')}}
 function openAddChannel(forestId){
   modal(`<div class="modal-head"><h2>채널 추가</h2><button class="modal-x" onclick="closeM()">${ic('x','sm')}</button></div><div class="modal-body"><div class="mfield"><label>채널 이름</label><input class="inp" id="nc-name" placeholder="예: 잡담, 공지" maxlength="20"></div><div class="mfield"><label>채널 유형</label><div style="display:flex;gap:8px"><button class="btn btn-primary" id="nct-post" onclick="pickChType('post')" style="flex:1">${ic('hash','sm')} 게시판</button><button class="btn btn-secondary" id="nct-chat" onclick="pickChType('chat')" style="flex:1">${ic('volume','sm')} 채팅</button></div><input type="hidden" id="nc-type" value="post"></div><div class="mfield"><label>설명 (선택)</label><input class="inp" id="nc-desc" placeholder="이 채널은 어떤 곳인가요?"></div><button class="btn btn-primary btn-block" onclick="addChannel('${forestId}')">만들기</button></div>`);
@@ -2927,13 +1784,14 @@ Object.assign(window,{render,goHome,goForest,goChannel,goSub,go,goProfile,goBack
   cdd,toggleCDD,pickCDD,
   searchByTag,votePoll,renderPoll,toggleSubscribe,blockUser,unblockUser,reportPost,reportUser,setMemberRole,getRoleBadge,markAllNotifRead,saveDraft,loadDrafts,openDrafts,restoreDraft,openSchedulePicker,setSchedule,parseMentions,deleteDM,dmAttachImg,setVisibility,addComposePoll,renderComposePoll,
   setupMentionAutocomplete,pickMention,closeMentionPop,_setPanelBlur,
-  openForestSettings:openForestEditModal, deleteForest, searchGif, sendGif, openChannelPerms, setCperm, saveCperm, saveFsCfg, toggleFsCfg, setFsCfg});
+  openForestSettings:openForestEditModal, deleteForest, searchGif, sendGif, openChannelPerms, setCperm, saveCperm, saveFsCfg, toggleFsCfg, setFsCfg,
+  gifSearchDebounce, uploadBanner, uploadAvatar, uploadToStorage});
 window.S=S;window.pImgs=pImgs;window.pFiles=pFiles;
 Object.defineProperties(window,{nfStep:{get:()=>nfStep,set:v=>{nfStep=v}},nfColor:{get:()=>nfColor,set:v=>{nfColor=v}},nfEmoji:{get:()=>nfEmoji,set:v=>{nfEmoji=v}},nfName:{get:()=>nfName,set:v=>{nfName=v}}});
 
 // ═══ INIT ═══
 loadSes();
-await loadAll();
+loadAll();
 </script>
 </body>
 </html>
