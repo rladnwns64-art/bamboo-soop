@@ -187,6 +187,7 @@ img{max-width:100%}svg{display:inline-block;vertical-align:middle}
 .detail-body .mention{color:#ef4444;font-weight:700;cursor:pointer;background:rgba(239,68,68,0.1);padding:1px 6px;border-radius:4px}.detail-body .mention:hover{text-decoration:underline;background:rgba(239,68,68,0.2)}
 .detail-meta{display:flex;align-items:center;gap:16px;font-size:13px;color:var(--text3);padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-bottom:14px}
 .detail-meta span{display:inline-flex;align-items:center;gap:4px}
+.detail-meta span svg.ico{opacity:.5}
 .detail-acts{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
 .d-act{display:flex;align-items:center;gap:6px;padding:9px 16px;border-radius:10px;font-size:13.5px;font-weight:600;color:var(--text2);background:var(--card2);border:1px solid var(--line);transition:.15s;cursor:pointer}
 .d-act:hover{background:var(--hover)}
@@ -667,7 +668,7 @@ textarea.inp{min-height:100px;resize:vertical;line-height:1.55}
 .btn-icon:hover{background:var(--hover);color:var(--text)}
 .btn-icon.danger:hover{background:rgba(239,68,68,0.08);color:var(--like)}
 
-.empty{text-align:center;padding:60px 20px;color:var(--text3)}
+.empty{text-align:center;padding:60px 20px;color:var(--text3);width:100%;grid-column:1/-1}
 .empty .ico{width:44px;height:44px;margin:0 auto 12px}
 .empty h3{font-size:16px;color:var(--text2);font-weight:600;margin-bottom:4px}
 .empty p{font-size:13px}
@@ -717,10 +718,49 @@ textarea.inp{min-height:100px;resize:vertical;line-height:1.55}
 /* 모바일 */
 @media(max-width:1100px){.shell{grid-template-columns:72px 240px 1fr}.shell.no-panel{grid-template-columns:72px 240px 1fr}.member-panel{display:none}}
 @media(max-width:900px){.shell,.shell.no-panel{grid-template-columns:60px 1fr}.side{display:none}}
-@media(max-width:640px){.shell,.shell.no-panel{grid-template-columns:1fr}.rail,.side{display:none}body{padding-bottom:64px}
-  .mob-bar{display:flex!important;position:fixed;bottom:0;left:0;right:0;height:60px;z-index:100;background:var(--bg);border-top:1px solid var(--line);align-items:center;justify-content:space-around}
-  .mob-bar button{color:var(--text3);padding:8px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px}
-  .mob-bar button.on{color:var(--accent)}
+@media(max-width:640px){
+  .shell,.shell.no-panel{grid-template-columns:1fr!important}
+  .rail,.side,.member-panel{display:none!important}
+  body{padding-bottom:68px}
+  .main{padding:8px!important}
+  .mob-bar{display:flex!important;position:fixed;bottom:0;left:0;right:0;height:64px;z-index:200;background:var(--card);border-top:1px solid var(--line);align-items:center;justify-content:space-around;padding:0 4px;box-shadow:0 -2px 12px rgba(0,0,0,0.08)}
+  .mob-bar button{color:var(--text3);padding:6px 12px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;font-weight:600;border:none;background:none;cursor:pointer;border-radius:12px;transition:.15s}
+  .mob-bar button.on{color:var(--accent);background:var(--accent-soft)}
+  .mob-bar button svg{width:22px;height:22px}
+  /* 카드 모바일 */
+  .pcard{margin:0 -4px;border-radius:14px}
+  .home-section{padding:12px 0}
+  .disc-fcard-grid{grid-template-columns:1fr!important;gap:10px}
+  .home-grid{grid-template-columns:1fr!important}
+  /* 모달 모바일 */
+  .modal-overlay .modal-content,.modal-content{width:100vw!important;max-width:100vw!important;height:100vh!important;max-height:100vh!important;border-radius:0!important;margin:0!important}
+  /* 탐색 배너 */
+  .disc-banner{border-radius:14px!important;padding:20px!important}
+  .disc-banner h2{font-size:20px!important}
+  .disc-cats{gap:6px!important;flex-wrap:wrap}
+  .disc-cat{padding:7px 14px!important;font-size:13px!important}
+  /* 채팅 */
+  .chat-input-box{border-radius:14px!important}
+  .chat-input{padding:8px!important}
+  /* 디테일 */
+  .detail-wrap{padding:16px 12px!important}
+  .detail-acts{flex-wrap:wrap;gap:6px!important}
+  .d-act{font-size:12px!important;padding:8px 12px!important}
+  /* 프로필 */
+  .prof-banner{height:120px!important}
+  .prof-av{width:72px!important;height:72px!important;margin-top:-36px!important}
+  /* 토스트 */
+  .toast-stack{top:12px!important;right:12px!important;left:12px!important;align-items:stretch!important}
+  .toast{max-width:100%!important}
+  /* 숲 헤더 */
+  .forest-head{padding:12px!important}
+  /* 검색 */
+  .search-wrap input{font-size:15px!important}
+}
+@media(max-width:400px){
+  .disc-fcard-grid{grid-template-columns:1fr!important}
+  .detail-meta{gap:10px!important;font-size:12px!important}
+  .pcard-name{font-size:13px!important}
 }
 .mob-bar{display:none}
 </style>
@@ -1450,7 +1490,7 @@ function pcard(p){
   const fileHtml=files.length
     ?`<div class="pcard-files">${files.map(f2=>_isImg(f2.name)&&f2.data
       ?`<img src="${esc(f2.data)}" onclick="event.stopPropagation();viewImg('${esc(f2.data)}')" style="max-width:100%;max-height:220px;border-radius:10px;cursor:pointer;object-fit:cover">`
-      :`<div class="pcard-file" onclick="event.stopPropagation();downloadFile('${esc(f2.name)}','${esc(f2.data||'')}')">📎 ${esc(f2.name)}</div>`).join('')}</div>`
+      :`<div class="pcard-file" onclick="event.stopPropagation();downloadFile('${esc(f2.name)}','${esc(f2.data||'')}')">${ic('file','xs')} ${esc(f2.name)}</div>`).join('')}</div>`
     :'';
 
 
@@ -1758,6 +1798,8 @@ function openForestSettings(){
     ${toggle('anonymous_allowed','익명 글쓰기 허용','멤버들이 익명으로 글 올릴 수 있음')}
     ${toggle('invite_only','초대 전용','초대 링크로만 가입 가능')}
     ${toggle('verified_only','인증 멤버만','인증된 멤버만 글쓰기 가능')}
+    ${toggle('members_only','멤버 전용','가입한 멤버만 숲에 접근 가능')}
+    ${toggle('admin_post_only','관리자만 글쓰기','일반 멤버는 댓글만 가능')}
     <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">콘텐츠 설정</div>
     ${toggle('allow_images','이미지 업로드 허용','글/채팅에 이미지 첨부 가능')}
     ${toggle('allow_links','링크 공유 허용','외부 링크 포함 허용')}
@@ -2016,7 +2058,23 @@ async function submitPost(){
     await loadAll();
   }catch(e){console.error(e);toast('게시 실패: '+e.message)}
 }
-function pickFile(inp){for(const f of inp.files){pFiles.push(f);toast(`파일 첨부됨: ${f.name}`)}}
+function pickFile(inp){
+  for(const f of inp.files){
+    pFiles.push(f);
+    if(/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name)){
+      const reader=new FileReader();
+      reader.onload=e=>{pImgs.push({url:e.target.result,name:f.name});drawPreview()};
+      reader.readAsDataURL(f);
+    }
+  }
+  drawFilePreview();
+}
+function drawFilePreview(){
+  let el=document.getElementById('c-file-preview');
+  if(!el){const pp=document.getElementById('c-preview');if(!pp)return;el=document.createElement('div');el.id='c-file-preview';el.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin-top:6px';pp.after(el)}
+  const nonImg=pFiles.filter(f=>!/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name));
+  el.innerHTML=nonImg.map((f,i)=>`<div style="display:inline-flex;align-items:center;gap:5px;padding:6px 10px;border-radius:8px;background:var(--card2);border:1px solid var(--line);font-size:12px">${ic('file','xs')} ${f.name.length>20?f.name.slice(0,17)+'...':f.name}<button onclick="pFiles.splice(${i},1);drawFilePreview()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 2px">×</button></div>`).join('');
+}
 
 async function saveForest(id){
   const name=document.getElementById('fs-name')?.value.trim();
@@ -2649,14 +2707,15 @@ let pendingAv=null,pendingBanner=null;
 
 // ═══ 모바일 하단 네비바 ═══
 function mobBar(){
+  const v=S.view;
   const items=[
-    {icon:'home',label:'홈',action:"goHome()"},
-    {icon:'compass',label:'탐색',action:"openFindForest()"},
-    {icon:'edit',label:'글쓰기',action:"openCompose()"},
-    {icon:'bell',label:'알림',action:"toggleNotifPanel()"},
-    {icon:'user',label:'프로필',action:S.me?`goProfile('${S.me}')`:"openAuth()"},
+    {icon:'home',label:'홈',action:"goHome()",on:v==='home'},
+    {icon:'compass',label:'탐색',action:"openFindForest()",on:v==='discover'},
+    {icon:'edit',label:'글쓰기',action:"openCompose()",on:false},
+    {icon:'bell',label:'알림',action:"toggleNotifPanel()",on:false},
+    {icon:'user',label:'프로필',action:S.me?`goProfile('${S.me}')`:"openAuth()",on:v==='profile'&&S.target===S.me},
   ];
-  return `<div class="mob-bar">${items.map(it=>`<button onclick="${it.action}">${ic(it.icon,'sm')}<span>${it.label}</span></button>`).join('')}</div>`;
+  return `<div class="mob-bar">${items.map(it=>`<button class="${it.on?'on':''}" onclick="${it.action}">${ic(it.icon,'sm')}<span>${it.label}</span></button>`).join('')}</div>`;
 }
 
 // ═══ 트렌딩 태그 ═══
@@ -2710,7 +2769,7 @@ function detailView(){
   const fileHtml=files.length
     ?`<div class="pcard-files" style="margin:8px 0">${files.map(f2=>_isImg2(f2.name)&&f2.data
       ?`<img src="${esc(f2.data)}" onclick="viewImg('${esc(f2.data)}')" style="max-width:100%;max-height:320px;border-radius:12px;cursor:pointer;object-fit:cover">`
-      :`<div class="pcard-file" onclick="downloadFile('${esc(f2.name)}','${esc(f2.data||'')}')">📎 ${esc(f2.name)}</div>`).join('')}</div>`
+      :`<div class="pcard-file" onclick="downloadFile('${esc(f2.name)}','${esc(f2.data||'')}')">${ic('file','xs')} ${esc(f2.name)}</div>`).join('')}</div>`
     :'';
 
 
@@ -2812,8 +2871,8 @@ function profileView(){
         <button class="btn btn-primary" onclick="openDM('${nick}')">${ic('msgCircle','xs')} 메시지</button>
         <button class="btn btn-secondary" onclick="follow('${nick}')">${isFollowing?ic('check','xs')+' 팔로잉':ic('userPlus','xs')+' 팔로우'}</button>
         ${!isFriend?`<button class="btn btn-secondary" onclick="sendFriendReq('${nick}')">${ic('userPlus','xs')} 친구 요청</button>`:'<span style="padding:7px 14px;font-size:13px;color:var(--green);font-weight:600">👥 친구</span>'}
-        ${!isBlocked?`<button class="btn" style="color:var(--text3)" onclick="blockUser('${nick}')">차단</button>`:`<button class="btn" style="color:var(--like)" onclick="unblockUser('${nick}')">차단 해제</button>`}
-        <button class="btn" style="color:var(--text3)" onclick="reportUser('${nick}')">${ic('eye','xs')}</button>
+        ${!isBlocked?`<button class="btn btn-secondary" style="color:var(--like);border-color:var(--like)" onclick="blockUser('${nick}')">🚫 차단</button>`:`<button class="btn btn-secondary" style="color:var(--like);border-color:var(--like)" onclick="unblockUser('${nick}')">차단 해제</button>`}
+        <button class="btn btn-secondary" style="color:var(--text3)" onclick="reportUser('${nick}')">🚨 신고</button>
       </div>`;
 
   const lvBadge=getLvBadge(nick);
