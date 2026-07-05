@@ -2094,6 +2094,7 @@ function authTab(tab){
   const form=document.getElementById('auth-form');if(!form)return;
   if(tab==='login'){
     form.innerHTML=`
+      <div class="mfield"><label>이메일</label><input class="inp" type="email" id="auth-email-login" placeholder="가입할 때 쓴 이메일" onkeydown="if(event.key==='Enter')doAuth('login')"></div>
       <div class="mfield"><label>닉네임</label><input class="inp" id="auth-nick" placeholder="가입할 때 만든 닉네임" maxlength="12" onkeydown="if(event.key==='Enter')doAuth('login')"></div>
       <div class="mfield"><label>비밀번호</label><input class="inp" type="password" id="auth-pw" placeholder="비밀번호" onkeydown="if(event.key==='Enter')doAuth('login')"></div>
       <button class="btn btn-primary btn-block" onclick="doAuth('login')">로그인</button>`;
@@ -2121,11 +2122,10 @@ async function doAuth(type){
 
   if(type==='login'){
     if(!nick||!pw){toast('닉네임과 비밀번호를 입력하세요');return}
-    // 닉네임으로 가짜 이메일 생성
-    const email=`${nick}@hapseong.local`;
-    const {error}=await sb.auth.signInWithPassword({email,password:pw});
-    if(error){toast('닉네임 또는 비밀번호가 틀렸어요');return}
-    // 세션에서 닉네임 가져오기
+    const emailInput=document.getElementById('auth-email-login')?.value.trim();
+    if(!emailInput){toast('이메일을 입력하세요');return}
+    const {error}=await sb.auth.signInWithPassword({email:emailInput,password:pw});
+    if(error){toast('이메일, 닉네임 또는 비밀번호가 틀렸어요');return}
     S.me=nick;localStorage.setItem('me',nick);
     closeM();toast(`반가워요, ${nick}! 🎋`);await loadAll();
 
@@ -2158,7 +2158,7 @@ async function doAuth(type){
       // profiles 저장 (user_id 포함)
       await sb.from('profiles').insert({
         nick,real_name:name,class_num:classN,student_num:numN,
-        verified:true,bio:'',avatar:'',user_id:uid,
+        verified:true,bio:'',avatar:'',user_id:uid,email,
         created_at:new Date().toISOString()
       });
 
