@@ -763,6 +763,22 @@ textarea.inp{min-height:100px;resize:vertical;line-height:1.55}
   .pcard-name{font-size:13px!important}
 }
 .mob-bar{display:none}
+/* 튜토리얼 */
+.tut-overlay{position:fixed;inset:0;z-index:9990;pointer-events:auto}
+.tut-dim{position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9991;pointer-events:auto;transition:opacity .3s}
+.tut-highlight{position:fixed;z-index:9992;border-radius:14px;box-shadow:0 0 0 4px var(--accent),0 0 0 9999px rgba(0,0,0,0.55);pointer-events:none;transition:all .35s cubic-bezier(.4,0,.2,1)}
+.tut-card{position:fixed;z-index:9993;background:var(--card);border:1px solid var(--line2);border-radius:18px;padding:20px 22px;max-width:320px;box-shadow:0 12px 40px rgba(0,0,0,0.25);pointer-events:auto;animation:tutPop .3s cubic-bezier(.2,1,.3,1)}
+.tut-card h3{font-size:16px;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.tut-card p{font-size:13.5px;color:var(--text2);line-height:1.55;margin-bottom:14px}
+.tut-step{font-size:11px;color:var(--text3);font-weight:600;margin-bottom:10px}
+.tut-btns{display:flex;gap:8px;justify-content:flex-end}
+.tut-btns button{padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;border:none;transition:.15s}
+.tut-skip{background:var(--card2);color:var(--text2)}
+.tut-skip:hover{background:var(--hover)}
+.tut-next{background:var(--accent);color:#fff}
+.tut-next:hover{opacity:.9}
+.tut-arrow{position:absolute;width:12px;height:12px;background:var(--card);border:1px solid var(--line2);transform:rotate(45deg);z-index:-1}
+@keyframes tutPop{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:none}}
 </style>
 </head>
 <body>
@@ -1816,6 +1832,9 @@ function openForestSettings(){
     ${select('default_visibility','기본 글 공개 범위',[['public','전체 공개'],['members','멤버만'],['friends','친구만']])}
     <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">기타</div>
     ${toggle('welcome_dm','가입 인사 DM','가입 시 자동 환영 DM 발송')}
+    </div>
+    <div class="settings-group"><h3>기타</h3>
+    <div style="padding:8px 0"><button class="btn btn-secondary" onclick="localStorage.removeItem('tut_done');closeM();startTutorial()" style="width:100%">📖 튜토리얼 다시 보기</button></div>
     ${toggle('pin_rules','규칙 고정','채널 상단에 규칙 메시지 고정')}
     <div class="mfield" style="margin-top:8px"><label>환영 메시지</label><input class="inp" id="fs-welcome" placeholder="가입을 환영해요! 🎋" value="${escA(f.welcome_msg||'')}"></div>
     <div class="mfield"><label>최대 멤버 수 (0=무제한)</label><input class="inp" type="number" id="fs-maxmem" placeholder="0" value="${f.max_members||0}" min="0" max="10000"></div>
@@ -2185,7 +2204,7 @@ async function doAuth(type){
     const {error}=await sb.auth.signInWithPassword({email:emailInput,password:pw});
     if(error){toast('이메일, 닉네임 또는 비밀번호가 틀렸어요');return}
     S.me=nick;localStorage.setItem('me',nick);
-    closeM();toast(`반가워요, ${nick}! 🎋`);await loadAll();
+    closeM();toast(`반가워요, ${nick}! 🎋`);await loadAll();checkTutorial();
 
   }else{
     const classN=parseInt(document.getElementById('auth-class')?.value||'0');
@@ -2249,29 +2268,41 @@ function doSearch(v){S.q=v;render();const inp=document.getElementById('search-in
 function openDetail(id){
   const p=S.posts.find(x=>x.id===id);if(!p)return;
   S.subview='detail';S.target=id;
-  sb.from('posts').update({views:(p.views||0)+1}).eq('id',id).then(()=>{}).catch(()=>{});
+  sb.from('posts').update({views:(p.views||0)+1}).eq('id',id).then(r=>{if(r.error)console.error('views err:',r.error)}).catch(e=>console.error('views:',e));
   render();
 }
 
 // ═══ 액션 함수들 ═══
 async function like(id){
-  const liked=S.likes.has(id);const me=whoAmI();
+  if(!S.me){toast('로그인이 필요해요','warn');openAuth();return}
+  const liked=S.likes.has(id);
   if(liked){S.likes.delete(id);S.likeCounts[id]=Math.max(0,(S.likeCounts[id]||1)-1)}
   else{S.likes.add(id);S.likeCounts[id]=(S.likeCounts[id]||0)+1}
   render();
-  try{if(liked)await sb.from('likes').delete().eq('post_id',id).eq('liker',me);else await sb.from('likes').insert({post_id:id,liker:me})}catch(e){}
+  try{
+    const{error:le}=liked
+      ?await sb.from('likes').delete().eq('post_id',id).eq('liker',S.me)
+      :await sb.from('likes').insert({post_id:id,liker:S.me});
+    if(le){toast('좋아요 실패: '+le.message,'error');console.error('like err:',le);await loadAll()}
+  }catch(e){toast('좋아요 오류','error');console.error(e);await loadAll()}
 }
 async function likeCmt(id){
-  const liked=S.cmtLikes.has(id);const me=whoAmI();
+  if(!S.me){toast('로그인이 필요해요','warn');openAuth();return}
+  const liked=S.cmtLikes.has(id);
   if(liked){S.cmtLikes.delete(id);S.cmtLikeCounts[id]=Math.max(0,(S.cmtLikeCounts[id]||1)-1)}
   else{S.cmtLikes.add(id);S.cmtLikeCounts[id]=(S.cmtLikeCounts[id]||0)+1}
   render();
-  try{if(liked)await sb.from('comment_likes').delete().eq('comment_id',id).eq('liker',me);else await sb.from('comment_likes').insert({comment_id:id,liker:me})}catch(e){}
+  try{
+    const{error:ce}=liked
+      ?await sb.from('comment_likes').delete().eq('comment_id',id).eq('liker',S.me)
+      :await sb.from('comment_likes').insert({comment_id:id,liker:S.me});
+    if(ce){toast('댓글 좋아요 실패','error');console.error('cmtLike err:',ce);await loadAll()}
+  }catch(e){toast('오류','error');await loadAll()}
 }
 async function toggleBookmark(id){
   if(!S.me){toast('로그인이 필요해요');return}
   const has=S.bookmarks.has(id);if(has)S.bookmarks.delete(id);else S.bookmarks.add(id);render();
-  try{if(has)await sb.from('bookmarks').delete().eq('post_id',id).eq('nick',S.me);else await sb.from('bookmarks').insert({post_id:id,nick:S.me})}catch(e){}
+  try{const{error:be}=has?await sb.from('bookmarks').delete().eq('post_id',id).eq('nick',S.me):await sb.from('bookmarks').insert({post_id:id,nick:S.me});if(be)toast('북마크 실패','error')}catch(e){toast('북마크 오류','error')}
 }
 async function follow(nick){
   if(!S.me){openAuth();return}
@@ -2283,12 +2314,17 @@ async function delPost(id){
   try{await sb.from('posts').delete().eq('id',id);toast('삭제됨');S.subview='feed';await loadAll()}catch(e){toast('삭제 실패')}
 }
 async function toggleReaction(pid,emoji){
-  const me=whoAmI();const key=pid+'|'+emoji;const has=S.myReactions.has(key);
+  if(!S.me){toast('로그인이 필요해요','warn');openAuth();return}
+  const key=pid+'|'+emoji;const has=S.myReactions.has(key);
+  if(has){S.myReactions.delete(key);if(S.reactions[pid]?.[emoji])S.reactions[pid][emoji]--}
+  else{S.myReactions.add(key);(S.reactions[pid]=S.reactions[pid]||{})[emoji]=(S.reactions[pid][emoji]||0)+1}
+  render();
   try{
-    if(has){S.myReactions.delete(key);if(S.reactions[pid]?.[emoji])S.reactions[pid][emoji]--;await sb.from('reactions').delete().eq('post_id',pid).eq('reactor',me).eq('emoji',emoji)}
-    else{S.myReactions.add(key);(S.reactions[pid]=S.reactions[pid]||{})[emoji]=(S.reactions[pid][emoji]||0)+1;await sb.from('reactions').insert({post_id:pid,reactor:me,emoji})}
-    render();
-  }catch(e){}
+    const{error}=has
+      ?await sb.from('reactions').delete().eq('post_id',pid).eq('reactor',S.me).eq('emoji',emoji)
+      :await sb.from('reactions').insert({post_id:pid,reactor:S.me,emoji});
+    if(error){toast('반응 실패: '+error.message,'error');console.error('reaction err:',error);await loadAll()}
+  }catch(e){toast('반응 오류','error');console.error(e);await loadAll()}
 }
 function toggleReactPop(pid){document.getElementById('rp-'+pid)?.classList.toggle('hidden')}
 function toggleReply(id){document.getElementById('rb-'+id)?.classList.toggle('hidden')}
@@ -3044,6 +3080,94 @@ async function openLikeList(postId){
 window.openLikeList=openLikeList;
 window.detailView=detailView;window.profileView=profileView;
 window.mobBar=mobBar;window.getTrendingTags=getTrendingTags;window.getWeeklyTop=getWeeklyTop;
+
+// ═══ 튜토리얼 ═══
+const TUT_STEPS=[
+  {emoji:'🎋',title:'대나무숲에 오신 걸 환영해요!',desc:'이곳은 우리 학교만의 소통 공간이에요. 게시글을 올리고, 채팅하고, 친구를 만들어보세요!',target:null},
+  {emoji:'🏠',title:'홈 피드',desc:'인기 글, 추천 숲, 추천 사용자를 한눈에 볼 수 있어요. 여기가 시작점!',target:'.main',pos:'center'},
+  {emoji:'🌲',title:'대나무숲이란?',desc:'숲은 주제별 커뮤니티예요. 게임, 공부, 일상 등 관심 있는 숲에 가입해서 글을 올릴 수 있어요.',target:'.side-head',pos:'right'},
+  {emoji:'✏️',title:'글쓰기',desc:'하단의 글쓰기 버튼이나 + 버튼을 눌러 새 게시물을 작성해보세요. 이미지, 투표, 파일 첨부도 가능해요!',target:'.compose-fab,.mob-bar',pos:'top'},
+  {emoji:'💬',title:'채팅',desc:'숲 안에 채팅 채널이 있어요. 실시간으로 대화하고, GIF와 이모지도 보낼 수 있어요!',target:null},
+  {emoji:'🔍',title:'탐색',desc:'새로운 숲을 찾아보세요! 카테고리별로 검색하거나 추천을 받을 수 있어요.',target:null},
+  {emoji:'👤',title:'프로필',desc:'프로필을 꾸며보세요! 아바타, 배너, 소개글을 설정할 수 있고 다른 사람을 팔로우할 수도 있어요.',target:null},
+  {emoji:'🎉',title:'준비 완료!',desc:'이제 대나무숲을 자유롭게 탐험해보세요! 궁금한 게 있으면 설정에서 튜토리얼을 다시 볼 수 있어요.',target:null},
+];
+let tutStep=0,tutEls={};
+
+function startTutorial(){
+  if(document.getElementById('tut-overlay'))return;
+  tutStep=0;
+  const overlay=document.createElement('div');
+  overlay.id='tut-overlay';
+  overlay.className='tut-overlay';
+  overlay.innerHTML='<div class="tut-dim" onclick="skipTutorial()"></div><div id="tut-highlight" class="tut-highlight" style="display:none"></div><div id="tut-card" class="tut-card"></div>';
+  document.body.appendChild(overlay);
+  showTutStep();
+}
+
+function showTutStep(){
+  const step=TUT_STEPS[tutStep];
+  if(!step){endTutorial();return}
+  const card=document.getElementById('tut-card');
+  const hl=document.getElementById('tut-highlight');
+  if(!card)return;
+
+  const total=TUT_STEPS.length;
+  const isLast=tutStep===total-1;
+  const isFirst=tutStep===0;
+
+  card.innerHTML=`
+    <div class="tut-step">${tutStep+1} / ${total}</div>
+    <h3>${step.emoji} ${step.title}</h3>
+    <p>${step.desc}</p>
+    <div class="tut-btns">
+      ${isFirst?`<button class="tut-skip" onclick="skipTutorial()">건너뛰기</button>`:`<button class="tut-skip" onclick="prevTutStep()">이전</button>`}
+      <button class="tut-next" onclick="${isLast?'endTutorial()':'nextTutStep()'}">
+        ${isLast?'시작하기! 🚀':'다음'}
+      </button>
+    </div>`;
+
+  // 타겟 하이라이트
+  const targetEl=step.target?document.querySelector(step.target):null;
+  if(targetEl){
+    const r=targetEl.getBoundingClientRect();
+    hl.style.display='block';
+    hl.style.top=(r.top-6)+'px';
+    hl.style.left=(r.left-6)+'px';
+    hl.style.width=(r.width+12)+'px';
+    hl.style.height=(r.height+12)+'px';
+    // 카드 위치
+    const cardW=320;
+    let cx=r.left,cy=r.bottom+16;
+    if(cy+200>window.innerHeight)cy=r.top-200;
+    if(cx+cardW>window.innerWidth)cx=window.innerWidth-cardW-16;
+    if(cx<12)cx=12;
+    card.style.top=Math.max(12,cy)+'px';
+    card.style.left=cx+'px';
+  }else{
+    hl.style.display='none';
+  }
+  if(targetEl){
+    card.style.transform='none';
+  }else{
+    card.style.top='50%';card.style.left='50%';card.style.transform='translate(-50%,-50%)';
+  }
+}
+
+function nextTutStep(){tutStep++;showTutStep()}
+function prevTutStep(){if(tutStep>0){tutStep--;showTutStep()}}
+function skipTutorial(){endTutorial()}
+function endTutorial(){
+  const el=document.getElementById('tut-overlay');
+  if(el)el.remove();
+  localStorage.setItem('tut_done','1');
+}
+function checkTutorial(){
+  if(!localStorage.getItem('tut_done')&&S.me){
+    setTimeout(()=>startTutorial(),800);
+  }
+}
+window.startTutorial=startTutorial;window.nextTutStep=nextTutStep;window.prevTutStep=prevTutStep;window.skipTutorial=skipTutorial;window.endTutorial=endTutorial;
 window.broadcastTyping=broadcastTyping;
 
 // ═══ GLOBAL EXPORTS ═══
@@ -3062,7 +3186,7 @@ Object.defineProperties(window,{nfStep:{get:()=>nfStep,set:v=>{nfStep=v}},nfColo
 // ═══ INIT ═══
 (async()=>{
   await loadSes();
-  await loadAll();
+  await loadAll();checkTutorial();
 })();
 </script>
 </body>
