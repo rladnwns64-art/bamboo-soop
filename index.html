@@ -138,7 +138,17 @@ img{max-width:100%}svg{display:inline-block;vertical-align:middle}
 .pin-item .pin-meta{font-size:11.5px;color:var(--text3);margin-bottom:4px;display:flex;align-items:center;gap:5px}
 .pin-item .pin-txt{font-size:13.5px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .pin-item .pin-img{width:100%;border-radius:8px;margin-top:6px;max-height:120px;object-fit:cover}
-.notif-item{display:flex;gap:10px;padding:10px;border-radius:10px;cursor:pointer;transition:.15s;position:relative}
+.notif-item{display:flex;gap:12px;padding:12px;border-radius:12px;cursor:pointer;transition:.15s;position:relative}
+.notif-icon{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;background:var(--card2)}
+.notif-icon.cmt{background:#dbeafe;color:#2563eb}
+.notif-icon.like{background:#fce7f3;color:#ec4899}
+.notif-icon.join{background:#d1fae5;color:#059669}
+.notif-icon.friend{background:#fef3c7;color:#d97706}
+.notif-icon.sys{background:var(--card2);color:var(--text3)}
+.ntxt{font-size:13.5px;line-height:1.45;color:var(--text)}
+.ntxt b{font-weight:700}
+.ntime{font-size:11px;color:var(--text3);margin-top:3px}
+.notif-sep{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;padding:14px 12px 6px}
 .notif-item:hover{background:var(--hover)}
 .notif-item.unread::before{content:'';position:absolute;left:2px;top:50%;transform:translateY(-50%);width:6px;height:6px;border-radius:50%;background:var(--accent)}
 .notif-icon{width:38px;height:38px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px}
@@ -845,6 +855,7 @@ const I={
   clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
   save:'<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
   folder:'<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+  eyeOff:'<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
 };
 const ic=(n,c='')=>`<svg class="ico ${c}" viewBox="0 0 24 24">${I[n]||''}</svg>`;
 
@@ -855,7 +866,7 @@ let S={me:null,view:'home',subview:'feed',forest:null,channel:null,q:'',
   cmtLikes:new Set(),cmtLikeCounts:{},reactions:{},myReactions:new Set(),
   friends:[],friendReqs:[],dms:[],dmTarget:null,
   notifications:[],unreadNotifCount:0,
-  polls:{},myPollVotes:new Set(),
+  polls:{},myPollVotes:new Set(),globalAnon:localStorage.getItem('globalAnon')==='1',homeLimit:10,
   postSubscriptions:new Set(),
   memberRoles:{},
   blockedUsers:new Set(),
@@ -1138,7 +1149,7 @@ function sideHome(){
     return `<div class="dm-item ${on?'on':''}" onclick="openDM('${n}')"><div style="position:relative;width:30px;height:30px;flex-shrink:0"><div class="av sm"><img src="${avatarOf(n)}"></div><div class="status-ring ${hasActivity?'online':'offline'}" style="position:absolute;bottom:-1px;right:-1px;width:11px;height:11px;border-radius:50%;border:2px solid var(--bg)"></div></div><div class="nm">${esc(n)}</div></div>`;
   }).join('');
   const userBar=S.me?`<div class="side-user"><div class="av" onclick="goProfile('${S.me}')"><img src="${avatarOf(S.me)}"></div><div class="info"><div class="nm">${esc(S.me)}</div><div class="st" style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 2px rgba(34,197,94,0.3)"></span>온라인</div></div><div class="acts"><button onclick="toggleTheme()" title="테마 전환">${ic(S.theme==='dark'?'sun':'moon','sm')}</button><button onclick="openSettings()" title="설정">${ic('settings','sm')}</button></div></div>`:`<div class="side-user" style="justify-content:flex-end"><div class="acts"><button onclick="toggleTheme()" title="테마">${ic(S.theme==="dark"?"sun":"moon","sm")}</button></div></div>`;
-  return `<div class="side"><div class="side-head"><h2>대나무숲</h2><div class="side-head-btn" onclick="go('home','search')">${ic('search','sm')}</div></div><div class="side-body">${menu}${dmPeople.length?'<div style="padding:10px 8px 4px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase">메시지</div>'+dmList:''}</div>${userBar}</div>`;
+  return `<div class="side"><div class="side-head"><h2>대나무숲</h2><div class="side-head-btn" onclick="go('home','search')">${ic('search','sm')}</div></div><div class="side-body">${menu}${dmPeople.length?'<div style="padding:10px 8px 4px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;display:flex;align-items:center;justify-content:space-between">메시지<span onclick="openGroupDM()" style="cursor:pointer;color:var(--accent);font-size:16px;line-height:1" title="그룹 DM">+</span></div>'+dmList:''}</div>${userBar}</div>`;
 }
 function sideForest(){
   const f=S.forests[S.forest];if(!f)return sideHome();
@@ -1146,13 +1157,13 @@ function sideForest(){
   const postChs=chs.filter(c=>c.type==='post');
   const chatChs=chs.filter(c=>c.type==='chat');
   const isOwner=f.owner===S.me;
-  const chItem=c=>{const on=S.channel===c.id;const icon=c.type==='chat'?ic('volume','sm'):ic('hash','sm');return `<div class="ch-item ${on?'on':''}" onclick="goChannel(${c.id})">${icon}<span style="flex:1">${esc(c.name)}</span><span class="ch-actions">${canManage?`<span class="ch-act-btn" title="설정" onclick="event.stopPropagation();openChannelPerms(${c.id})">${ic('settings','xs')}</span>`:''}</span></div>`};
+  const chItem=c=>{const on=S.channel===c.id;const icon=c.type==='chat'?ic('volume','sm'):ic('hash','sm');const cname=c.name.replace(/^#/,'');return `<div class="ch-item ${on?'on':''}" onclick="goChannel(${c.id})">${icon}<span style="flex:1">${esc(cname)}</span><span class="ch-actions">${canManage?`<span class="ch-act-btn" title="설정" onclick="event.stopPropagation();openChannelPerms(${c.id})">${ic('settings','xs')}</span>`:''}</span></div>`};
   const addChBtn=S.me?`<div class="ch-item" onclick="openAddChannel('${f.id}')" style="color:var(--text3)">${ic('plus','sm')}채널 추가</div>`:'';
   const emptyMsg=!chs.length?`<div style="padding:16px 12px;font-size:13px;color:var(--text3);text-align:center">아직 채널이 없어요<br>아래에서 추가해보세요!</div>`:'';
   const userBar=S.me?`<div class="side-user"><div class="av" onclick="goProfile('${S.me}')"><img src="${avatarOf(S.me)}"></div><div class="info"><div class="nm">${esc(S.me)}</div><div class="st" style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 2px rgba(34,197,94,0.3)"></span>온라인</div></div><div class="acts"><button onclick="toggleTheme()">${ic(S.theme==='dark'?'sun':'moon','sm')}</button><button onclick="openSettings()">${ic('settings','sm')}</button></div></div>`:`<div class="side-user" style="justify-content:flex-end"><div class="acts"><button onclick="toggleTheme()" title="테마">${ic(S.theme==="dark"?"sun":"moon","sm")}</button></div></div>`;
   const sectionHead=(label,icon)=>`<div class="ch-section-head" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.ch-section-toggle').classList.toggle('collapsed')" style="cursor:pointer">${icon||''}<span style="flex:1">${label}</span><span class="ch-section-toggle">${ic('chevDown','xs')}</span></div>`;
   const myRole=(S.memberRoles[f.id]||{})[S.me];const canManage=f.owner===S.me||myRole==='mod'||myRole==='admin';
-  return `<div class="side"><div class="side-head"><h2 style="cursor:pointer;display:flex;align-items:center;gap:6px" onclick="goForest('${f.id}')">${f.icon?`<img src="${f.icon}" style="width:20px;height:20px;border-radius:6px;object-fit:cover">`:`<span>${f.emoji}</span>`} ${esc(f.name)} ${ic('chevDown','xs')}</h2><div style="display:flex;gap:2px">${canManage?`<div class="side-head-btn" onclick="openForestEditModal('${f.id}')" title="숲 설정">${ic('settings','sm')}</div>`:''}</div></div><div class="side-body">${emptyMsg}${postChs.length?sectionHead('게시판')+'<div>'+postChs.map(chItem).join('')+'</div>':''}${chatChs.length?sectionHead('채팅')+'<div>'+chatChs.map(chItem).join('')+'</div>':''}${addChBtn}</div>${userBar}</div>`;
+  return `<div class="side"><div class="side-head"><h2 style="cursor:pointer;display:flex;align-items:center;gap:6px" onclick="goForest('${f.id}')">${f.icon?`<img src="${f.icon}" style="width:22px;height:22px;border-radius:7px;object-fit:cover">`:`<span style="font-size:18px">${f.emoji||'🎋'}</span>`} ${esc(f.name)} ${ic('chevDown','xs')}</h2><div style="display:flex;gap:2px">${canManage?`<div class="side-head-btn" onclick="openForestEditModal('${f.id}')" title="숲 설정">${ic('settings','sm')}</div>`:''}</div></div><div class="side-body">${emptyMsg}${postChs.length?sectionHead('게시판')+'<div>'+postChs.map(chItem).join('')+'</div>':''}${chatChs.length?sectionHead('채팅')+'<div>'+chatChs.map(chItem).join('')+'</div>':''}${addChBtn}</div>${userBar}</div>`;
 }
 
 function main(){
@@ -1174,8 +1185,8 @@ function main(){
     // 숲 뷰
     const ch=S.channels[S.channel];
     if(!ch){head=mainHead('채널 선택','');body=`<div class="empty">${ic('hash')}<h3>채널을 선택하세요</h3></div>`}
-    else if(ch.type==='chat'){head=mainHead('#'+ch.name,ch.description||'');body=chatView(ch)}
-    else{head=mainHead('#'+ch.name,ch.description||'');body=channelFeed(ch)}
+    else if(ch.type==='chat'){head=mainHead(ch.name.replace(/^#/,''),ch.description||'');body=chatView(ch)}
+    else{head=mainHead(ch.name.replace(/^#/,''),ch.description||'');body=channelFeed(ch)}
     if(S.subview==='detail'){head=mainHead('게시글','',true);body=detailView()}
     if(S.subview==='profile'){head=mainHead(S.target||'프로필','',true);body=profileView()}
   }
@@ -1231,7 +1242,13 @@ function homeFeed(){
   const _icPhoto=`<span style="font-size:15px;line-height:1">🖼️</span>`;
   const _icMember=`<span style="font-size:11px;line-height:1">👤</span>`;
   const _icPost=`<span style="font-size:11px;line-height:1">📝</span>`;
-  return `${ci}${trendHtml}${weeklyHtml}<div class="home-section"><h3 style="display:flex;align-items:center;gap:6px">${_icFire} 인기 글</h3>${popular.length?popular.map(p=>pcard(p)).join(''):'<p style="color:var(--text3)">아직 글이 없어요</p>'}</div>
+  // 최신글 (시간순)
+  const recentAll=S.posts.filter(p=>{const ch=S.channels[p.channel_id];return !(ch&&ch.type==='chat')&&!(p.title||'').startsWith('reply:')}).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+  const recentShow=recentAll.slice(0,S.homeLimit);
+  const hasMore=recentAll.length>S.homeLimit;
+  const recentHtml=recentShow.length?recentShow.map(p=>pcard(p)).join('')+(hasMore?`<button class="btn btn-secondary btn-block" onclick="S.homeLimit+=10;render()" style="margin-top:8px;font-weight:700">더 보기 (${recentAll.length-S.homeLimit>0?recentAll.length-S.homeLimit:0}개 남음)</button>`:''):'<p style="color:var(--text3)">아직 글이 없어요</p>';
+  return `${ci}${trendHtml}${weeklyHtml}<div class="home-section"><h3 style="display:flex;align-items:center;gap:6px">${ic('clock','sm')} 최신 글</h3>${recentHtml}</div>
+  <div class="home-section"><h3 style="display:flex;align-items:center;gap:6px">${_icFire} 인기 글</h3>${popular.length?popular.map(p=>pcard(p)).join(''):'<p style="color:var(--text3)">아직 글이 없어요</p>'}</div>
   ${recForests.length?`<div class="home-section"><h3 style="display:flex;align-items:center;gap:6px">${_icForest} 추천 대나무숲</h3><div class="disc-fcard-grid">${recForests.map(f=>{
   const iconHtml=f.icon?`<img src="${f.icon}" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-size:26px;line-height:1">🎋</span>`;
   return `<div class="disc-fcard" onclick="goForest('${f.id}')">
@@ -1260,7 +1277,7 @@ function photosView(){
 function searchView(){
   const recForests=Object.values(S.forests).slice(0,6);
   const forestCards=recForests.map(f=>{
-    const joined=S.myForests.has(f.id);
+    const joined=S.myForests.has(f.id)||S.myForests.has(Number(f.id))||S.myForests.has(String(f.id));
     const banner=f.banner?`url(${f.banner}) center/cover`:`linear-gradient(135deg,${f.color}cc,${f.color}55)`;
     return `<div class="disc-fcard" onclick="goForest('${f.id}')">
       <div class="disc-fcard-banner" style="background:${banner}">
@@ -1310,7 +1327,7 @@ function searchResults(){
   if(showUsers&&users.length)html+=`<div style="margin-bottom:20px"><div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">사용자</div>${users.map(u=>`<div class="friend-item" onclick="goProfile('${u.nick}')"><div class="av"><img src="${avatarOf(u.nick)}"></div><div class="info"><div class="nm">${esc(u.nick)}</div><div class="activity">${esc(u.bio||'소개 없음')}</div></div><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openDM('${u.nick}')">메시지</button></div>`).join('')}</div>`;
   if(showForests&&forests.length){
     const fCards=forests.map(f=>{
-      const joined=S.myForests.has(f.id);
+      const joined=S.myForests.has(f.id)||S.myForests.has(Number(f.id))||S.myForests.has(String(f.id));
       const banner=f.banner?`url(${f.banner}) center/cover`:`linear-gradient(135deg,${f.color}cc,${f.color}55)`;
       return `<div class="disc-fcard" onclick="goForest('${f.id}')">
         <div class="disc-fcard-banner" style="background:${banner}">
@@ -1376,7 +1393,7 @@ function dmView(){
           <label class="chat-tool-btn" title="이미지 첨부" style="cursor:pointer">${ic('image','sm')}<input type="file" accept="image/*" hidden onchange="dmAttachImg(this)"></label>
           <button class="chat-tool-btn" title="GIF" onclick="openDMGif()" style="font-size:11px;font-weight:800;color:var(--text2)">GIF</button>
         </div>
-        <input id="dm-inp" placeholder="${esc(S.dmTarget)}에게 메시지 보내기..." onkeydown="if(event.key==='Enter')sendDM()" oninput="broadcastTyping();setupMentionAutocomplete('dm-inp')" style="height:44px;flex:1;background:transparent;border:none;padding:0 8px;font-size:14px;color:var(--text)">
+        <button onclick="document.getElementById('dm-file-in').click()" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:4px">${ic('plus','sm')}</button><input type="file" id="dm-file-in" hidden accept="image/*,application/pdf,.doc,.docx,.txt,.zip,.hwp" onchange="dmAttachFile(this)" multiple><input id="dm-inp" placeholder="${esc(S.dmTarget)}에게 메시지 보내기..." onkeydown="if(event.key==='Enter')sendDM()" oninput="broadcastTyping();setupMentionAutocomplete('dm-inp')" style="height:44px;flex:1;background:transparent;border:none;padding:0 8px;font-size:14px;color:var(--text)">
         <div class="chat-input-right">
           <button class="chat-tool-btn" onclick="toggleDMEmoji()" title="이모지">😊</button>
           <button class="chat-send-btn" onclick="sendDM()">${ic('send','sm')}</button>
@@ -1441,7 +1458,7 @@ function findForestView(){
   });
   const catBtns=categories.map(c=>`<button onclick="window._findCat='${c}';render()" style="padding:6px 14px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;transition:.15s;background:${_cat===c?'var(--accent)':'var(--card2)'};color:${_cat===c?'#fff':'var(--text2)'};border:1px solid ${_cat===c?'var(--accent)':'var(--line)'}">${c}</button>`).join('');
   const cards=filtered.map(f=>{
-    const joined=S.myForests.has(f.id);
+    const joined=S.myForests.has(f.id)||S.myForests.has(Number(f.id))||S.myForests.has(String(f.id));
     const banner=f.banner?`url(${f.banner}) center/cover`:`linear-gradient(135deg,${f.color}cc,${f.color}55)`;
     return `<div class="disc-fcard" onclick="goForest('${f.id}')">
       <div class="disc-fcard-banner" style="background:${banner}">
@@ -1492,7 +1509,7 @@ function pcard(p){
   const pinBadge=p.pinned?`<span style="font-size:10px;background:var(--gold);color:#fff;padding:2px 7px;border-radius:6px;font-weight:700;margin-left:6px">${ic('pin','xs')} 고정</span>`:'';
 
   // 숲·채널 태그
-  const forestTag=f?`<span style="font-size:11px;color:var(--text3)">${f.emoji} ${esc(f.name)}${ch?' · #'+esc(ch.name):''}</span>`:'';
+  const forestTag=f?`<span style="font-size:11px;color:var(--text3)">${f.emoji} ${esc(f.name)}${ch?' · #'+esc(ch.name.replace(/^#/,'')):''}</span>`:'';
 
   // 이미지 썸네일
   let imgs=p.imgs||[];
@@ -1586,7 +1603,7 @@ function chatView(ch){
     return `<div class="chat-msg" id="msg-${m.id}"><div class="av sm ${m.author?'':'anon'}" onclick="${m.author?`goProfile('${m.author}')`:''}"><img src="${m.author?avatarOf(m.author):''}"></div><div class="bubble"><div class="nm"><span class="nm-nick">${esc(nick)}</span>${m.author?getLvBadge(m.author):''}<span class="time">${ago(m.created_at)}</span></div>${replyHtml}<div class="mtxt">${parseMentions(renderRich(m.content))}</div>${imgHtml}${rHtml?`<div class="msg-reactions">${rHtml}</div>`:''}</div><div class="msg-actions"><span class="msg-act" onclick="setChatReply(${m.id},'${escA(nick)}')" title="답글">↩</span><span class="msg-act" onclick="toggleMsgReactPop(event,${m.id})" title="반응">😊</span>${m.author===S.me?`<span class="msg-act" onclick="delPost(${m.id})" title="삭제">${ic('trash','xs')}</span>`:''}</div></div>`;
   }).join('');
   const replyBar=chatReplyTo?`<div class="chat-reply-box"><div class="reply-to">${ic('back','xs')} <b>${esc(chatReplyTo.nick)}</b>에게 답장 중</div><button style="color:var(--text3)" onclick="clearChatReply()">${ic('x','xs')}</button></div>`:'';
-  return `<div class="chat-wrap"><div class="chat-msgs" id="chat-msgs">${msgHtml||`<div class="empty" style="padding:40px">${ic('hash')}<h3>#${esc(ch.name)} 채팅을 시작하세요</h3><p>대화를 시작해보세요!</p></div>`}</div>${replyBar}<div class="chat-input"><div class="chat-input-box"><div class="chat-input-left"><button class="chat-tool-btn" onclick="document.getElementById('chat-file-in').click()" title="파일 첨부">${ic('plus','sm')}</button><input type="file" id="chat-file-in" hidden accept="image/*" onchange="chatAttachImg(this,${ch.id})"></div><input id="chat-inp" placeholder="#${esc(ch.name)}에 메시지 보내기..." onkeydown="if(event.key==='Enter')sendChat(${ch.id})" oninput="broadcastTyping();setupMentionAutocomplete('chat-inp')"><div class="chat-input-right"><button class="chat-tool-btn" title="GIF" onclick="openGifPop(${ch.id})" style="font-size:11px;font-weight:800;color:var(--text2)">GIF</button><button class="chat-tool-btn" onclick="toggleChatEmoji(${ch.id})" title="이모지">😊</button><button class="chat-send-btn" onclick="sendChat(${ch.id})">${ic('send','sm')}</button></div></div></div></div>`;
+  return `<div class="chat-wrap"><div class="chat-msgs" id="chat-msgs">${msgHtml||`<div class="empty" style="padding:40px">${ic('hash')}<h3>#${esc(ch.name.replace(/^#/,''))} 채팅을 시작하세요</h3><p>대화를 시작해보세요!</p></div>`}</div>${replyBar}<div class="chat-input"><div class="chat-input-box"><div class="chat-input-left"><button class="chat-tool-btn" onclick="document.getElementById('chat-file-in').click()" title="파일 첨부">${ic('plus','sm')}</button><input type="file" id="chat-file-in" hidden accept="image/*,application/pdf,.doc,.docx,.txt,.zip,.hwp" onchange="chatAttachFile(this,${ch.id})" multiple></div><input id="chat-inp" placeholder="#${esc(ch.name.replace(/^#/,''))}에 메시지 보내기..." onkeydown="if(event.key==='Enter')sendChat(${ch.id})" oninput="broadcastTyping();setupMentionAutocomplete('chat-inp')"><div class="chat-input-right"><button class="chat-tool-btn" title="GIF" onclick="openGifPop(${ch.id})" style="font-size:11px;font-weight:800;color:var(--text2)">GIF</button><button class="chat-tool-btn" onclick="toggleChatEmoji(${ch.id})" title="이모지">😊</button><button class="chat-send-btn" onclick="sendChat(${ch.id})">${ic('send','sm')}</button></div></div></div></div>`;
 }
 // ═══ 멤버 패널 ═══
 let _showMemberPanel=true;
@@ -1652,31 +1669,41 @@ function notifPanel(){
   const notifs=[];
   // DB 알림
   S.notifications.forEach(n=>{
-    notifs.push({type:n.type||'system',icon:n.type==='comment'?'💬':n.type==='like'?'❤️':n.type==='mention'?'@':n.type==='friend'?'👋':'🔔',txt:n.message||'알림',time:n.created_at,unread:!n.read_at,id:n.id,action:n.action_url?`go('home','detail')`:null});
+    if(n.type==='join_request'&&!n.read_at){
+      let actionData=null;try{actionData=JSON.parse(n.action_url)}catch(e){}
+      if(actionData&&actionData.action==='join_approve'){
+        notifs.push({type:'join_request',iconClass:'join',icon:'📬',txt:n.message||'가입 요청',time:n.created_at,unread:true,id:n.id,
+          customHtml:'<div style="display:flex;gap:6px;margin-top:8px"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();approveJoin(\''+actionData.forest_id+'\',\''+actionData.nick+'\','+n.id+')">승인</button><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();rejectJoin(\''+actionData.forest_id+'\',\''+actionData.nick+'\','+n.id+')">거절</button></div>'});
+      }else{
+        notifs.push({type:n.type||'system',icon:'🔔',txt:n.message||'알림',time:n.created_at,unread:!n.read_at,id:n.id});
+      }
+    }else{
+      notifs.push({type:n.type||'system',icon:n.type==='comment'?'💬':n.type==='like'?'❤️':n.type==='mention'?'@':n.type==='friend'?'👋':'🔔',txt:n.message||'알림',time:n.created_at,unread:!n.read_at,id:n.id,action:n.action_url&&n.type!=='join_request'?'go(\'home\',\'detail\')':null});
+    }
   });
   // 친구 요청
   S.friendReqs.forEach(r=>{
-    notifs.push({type:'friend',icon:'👋',txt:`<b>${esc(r.from_nick)}</b>님이 친구 요청을 보냈어요`,time:r.created_at,unread:true,action:`acceptFriend(${r.id})`});
+    notifs.push({type:'friend',iconClass:'friend',icon:'👋',txt:`<b>${esc(r.from_nick)}</b>님이 친구 요청을 보냈어요`,time:r.created_at,unread:true,action:`acceptFriend(${r.id})`});
   });
   // 내 글에 달린 최근 댓글
   if(S.me){
     const myPosts=S.posts.filter(p=>p.author===S.me);
     myPosts.forEach(p=>{
       (p.comments||[]).filter(c=>c.author!==S.me).slice(0,2).forEach(c=>{
-        notifs.push({type:'comment',icon:'💬',txt:`<b>${esc(c.author||'익명')}</b>님이 "<b>${esc((p.title||plainText(p.content)).slice(0,20))}</b>"에 댓글을 남겼어요`,time:c.created_at,unread:false});
+        notifs.push({type:'comment',iconClass:'cmt',icon:'💬',txt:`<b>${esc(c.author||'익명')}</b>님이 <b>${esc((p.title||plainText(p.content)).slice(0,20))}</b>에 댓글을 남겼어요`,time:c.created_at,unread:false,action:`openDetail(${p.id})`});
       });
     });
     // 내 글 좋아요 (likeCounts 기반 간이)
     myPosts.filter(p=>(S.likeCounts[p.id]||0)>0).slice(0,3).forEach(p=>{
-      notifs.push({type:'like',icon:'❤️',txt:`"<b>${esc((p.title||plainText(p.content)).slice(0,20))}</b>" 글에 좋아요 <b>${S.likeCounts[p.id]}개</b>`,time:p.created_at,unread:false});
+      notifs.push({type:'like',iconClass:'like',icon:'❤️',txt:`<b>${esc((p.title||plainText(p.content)).slice(0,20))}</b> 글에 좋아요 <b>${S.likeCounts[p.id]}개</b>`,time:p.created_at,unread:false,action:`openDetail(${p.id})`});
     });
   }
   notifs.sort((a,b)=>new Date(b.time)-new Date(a.time));
   const unread=notifs.filter(n=>n.unread);
   const read=notifs.filter(n=>!n.unread);
   const mkItem=n=>`<div class="notif-item ${n.unread?'unread':''}" ${n.action?`onclick="${n.action};closeSidePanel()"`:''}>
-    <div class="notif-icon">${n.icon}</div>
-    <div class="notif-body"><div class="ntxt">${n.txt}</div><div class="ntime">${ago(n.time)}</div></div>
+    <div class="notif-icon ${n.iconClass||'sys'}">${n.icon}</div>
+    <div class="notif-body"><div class="ntxt">${n.txt}</div>${n.customHtml||''}<div class="ntime">${ago(n.time)}</div></div>
   </div>`;
   const body=notifs.length
     ?`${unread.length?`<div class="notif-sep">새 알림</div>${unread.map(mkItem).join('')}`:''}
@@ -1751,19 +1778,18 @@ async function searchGif(q){
     const isTrending=!q||q==='trending'||q==='🔥인기';
     // Tenor v1 - API 키 불필요
     const url=isTrending
-      ?`https://api.tenor.com/v1/trending?key=LIVDSRZULELA&limit=20&media_filter=minimal&contentfilter=medium&locale=ko_KR`
-      :`https://api.tenor.com/v1/search?key=LIVDSRZULELA&q=${encodeURIComponent(q)}&limit=20&media_filter=minimal&contentfilter=medium&locale=ko_KR`;
+      ?`https://api.giphy.com/v1/gifs/trending?api_key=dc6zaTOxFJmzC&limit=20&rating=g`
+      :`https://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&q=${encodeURIComponent(q)}&limit=20&rating=g`;
     const res=await fetch(url);
     if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();
-    const results=data.results||[];
+    const results=data.data||[];
     if(!results.length){
       grid.innerHTML=`<div style="text-align:center;padding:20px;color:var(--text3)">😢 결과가 없어요</div>`;
       return;
     }
     grid.innerHTML=results.map(r=>{
-      const media=r.media?.[0];
-      const gifUrl=media?.tinygif?.url||media?.gif?.url||'';
+      const gifUrl=r.images?.fixed_height_small?.url||r.images?.fixed_height?.url||'';
       if(!gifUrl)return '';
       const safe=gifUrl.replace(/'/g,'%27');
       // 각 GIF가 자연스러운 비율로 표시되도록 (masonry 효과)
@@ -1820,6 +1846,11 @@ function openForestSettings(){
     ${toggle('verified_only','인증 멤버만','인증된 멤버만 글쓰기 가능')}
     ${toggle('members_only','멤버 전용','가입한 멤버만 숲에 접근 가능')}
     ${toggle('admin_post_only','관리자만 글쓰기','일반 멤버는 댓글만 가능')}
+    <div style="padding:12px 0;border-bottom:1px solid var(--line)">
+      <div style="font-weight:600;font-size:14px;margin-bottom:6px">${ic('users','sm')} 허용 유저 (화이트리스트)</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px">비워두면 모두 접근 가능. 쉼표로 구분</div>
+      <input class="inp" id="fs-whitelist" value="${escA(cfg.whitelist||'')}" placeholder="닉네임1, 닉네임2, ..." style="font-size:13px">
+    </div>
     <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">콘텐츠 설정</div>
     ${toggle('allow_images','이미지 업로드 허용','글/채팅에 이미지 첨부 가능')}
     ${toggle('allow_links','링크 공유 허용','외부 링크 포함 허용')}
@@ -1880,7 +1911,7 @@ function openChannelPerms(chId){
   </div>`;
   // 콜백 등록
   ['read','write','image','pin','delete_others'].forEach(k=>{window['_cpermCb_'+chId+'_'+k]=(v)=>setCperm(chId,k,v)});
-  modal(`<div class="modal-head"><h2>#${esc(ch.name)} 권한 설정</h2><button class="modal-x" onclick="closeM()">${ic('x','sm')}</button></div>
+  modal(`<div class="modal-head"><h2>#${esc(ch.name.replace(/^#/,''))} 권한 설정</h2><button class="modal-x" onclick="closeM()">${ic('x','sm')}</button></div>
   <div class="modal-body">
     ${roleOpt('read','읽기')}
     ${roleOpt('write','글/메시지 작성')}
@@ -1961,6 +1992,19 @@ function previewEditBanner(inp){
   const bg=document.getElementById('fs-banner-bg');
   if(bg)bg.style.background=`url(${url}) center/cover`;
 }
+async function chatAttachFile(inp,chId){
+  for(const file of inp.files){
+    if(file.type.startsWith('image/')){chatAttachImg({files:[file]},chId);continue}
+    // 일반 파일 → base64로 첨부
+    const reader=new FileReader();
+    reader.onload=async e=>{
+      const me=whoAmI();
+      try{await sb.from('messages').insert({channel_id:chId,author:S.me||null,anon_nick:S.me?null:anonNick(),content:'📎 '+file.name,files:[{name:file.name,data:e.target.result}]});await loadAll()}catch(err){toast('파일 전송 실패','error')}
+    };
+    reader.readAsDataURL(file);
+  }
+  inp.value='';
+}
 async function chatAttachImg(inp,chId){
   const f=inp.files[0];if(!f)return;inp.value='';
   if(f.size>5*1024*1024){toast('5MB 이하만');return}
@@ -1971,6 +2015,18 @@ async function chatAttachImg(inp,chId){
     await sb.from('posts').insert({forest_id:S.forest,channel_id:chId,author:S.me,anon_nick:null,content:'',title:'',imgs:[url],tags:[],files:[]});
     await loadAll();setTimeout(()=>{const el=document.getElementById('chat-msgs');if(el)el.scrollTo({top:el.scrollHeight,behavior:'smooth'})},100);
   }catch(e){toast('업로드 실패: '+e.message)}
+}
+async function dmAttachFile(inp){
+  if(!S.me||!S.dmTarget)return;
+  for(const file of inp.files){
+    if(file.type.startsWith('image/')){dmAttachImg({files:[file]});continue}
+    const reader=new FileReader();
+    reader.onload=async e=>{
+      try{await sb.from('dms').insert({from_nick:S.me,to_nick:S.dmTarget,content:'📎 '+file.name,files:[{name:file.name,data:e.target.result}]});await loadAll()}catch(err){toast('파일 전송 실패','error')}
+    };
+    reader.readAsDataURL(file);
+  }
+  inp.value='';
 }
 async function dmAttachImg(inp){
   const f=inp.files[0];if(!f)return;inp.value='';
@@ -2052,6 +2108,7 @@ function drawPreview(){
   }).join('');
 }
 async function submitPost(){
+  if(S.forest&&!checkForestPerm(S.forest,'post'))return;
   const ed=document.getElementById('editor');
   const title=document.getElementById('c-title')?.value.trim()||'';
   const content=ed?ed.innerHTML:'';
@@ -2104,6 +2161,12 @@ async function saveForest(id){
   const desc=document.getElementById('fs-desc')?.value.trim()||'';
   const f=S.forests[id];const color=document.getElementById('fs-color')?.value;
   const patch={name,description:desc,emoji:f?.emoji||'🎋',color};
+  // 권한 설정 수집
+  const permCfg={...(f?.config||{})};
+  const wl=document.getElementById('fe-whitelist')?.value?.trim()||'';
+  if(wl!==undefined)permCfg.whitelist=wl;
+  ['require_approval','read_only_guests','anonymous_allowed','invite_only','members_only','admin_post_only'].forEach(k=>{const el=document.getElementById('fe-'+k);if(el)permCfg[k]=el.classList.contains('on')});
+  patch.config=permCfg;
   try{
     if(editForestIcon instanceof File){
       toast('아이콘 업로드 중...','info');
@@ -2260,7 +2323,31 @@ window.openAuth=openAuth;window.doAuth=doAuth;window.authTab=authTab;window.logo
 
 // ═══ 네비게이션 ═══
 function goHome(){S.forest=null;S.channel=null;S.subview='feed';saveSes();render()}
-function goForest(id){S.forest=id;S.subview='feed';const f=S.forests[id];if(f&&f.channels.length)S.channel=f.channels[0].id;else S.channel=null;saveSes();render()}
+function goForest(id){
+  const f=S.forests[id];if(!f)return;
+  const isMember=S.myForests.has(id)||S.myForests.has(Number(id))||S.myForests.has(String(id));
+  if(S.me&&!isMember){
+    const bannerBg=f.banner?'url('+f.banner+') center/cover':'linear-gradient(135deg,'+f.color+'cc,'+f.color+'55)';
+    const iconHtml=f.icon?'<img src="'+f.icon+'" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid var(--card)">':'<div style="width:64px;height:64px;border-radius:50%;background:'+f.color+'22;display:flex;align-items:center;justify-content:center;font-size:32px;border:3px solid var(--card)">'+( f.emoji||'🎋')+'</div>';
+    modal('<div style="position:relative;height:100px;background:'+bannerBg+';border-radius:14px 14px 0 0"><button class="modal-x" onclick="closeM()" style="position:absolute;top:8px;right:8px">'+ic('x','sm')+'</button></div><div style="text-align:center;margin-top:-32px;padding:0 24px 24px"><div style="display:inline-block">'+iconHtml+'</div><h3 style="margin-top:10px;font-size:17px">'+esc(f.name)+'</h3><p style="color:var(--text3);font-size:13px;margin:6px 0 4px">'+esc(f.description||'')+'</p><div style="font-size:12px;color:var(--text3);margin-bottom:18px">'+ic('users','xs')+' '+f.members+'명</div><div style="display:flex;gap:8px;justify-content:center"><button class="btn btn-secondary" onclick="closeM()" style="flex:1">취소</button><button class="btn btn-primary" onclick="closeM();joinAndEnter(\''+id+'\' )" style="flex:1">가입하고 들어가기</button></div></div>');
+    return;
+  }
+  if(!checkForestPerm(id,'enter'))return;
+  S.forest=id;S.subview='feed';if(f&&f.channels.length)S.channel=f.channels[0].id;else S.channel=null;saveSes();render()
+}
+async function joinAndEnter(id){
+  if(!S.me){toast('로그인이 필요해요','warn');openAuth();return}
+  try{
+    if(!checkForestPerm(id,'join'))return;
+    await ensureProfile();
+    // 이미 가입됐는지 체크 안 하고 바로 INSERT (중복이면 무시)
+    const{error}=await sb.from('forest_members').insert({forest_id:Number(id),nick:S.me});
+    if(error&&error.code!=='23505'){toast('가입 실패: '+error.message,'error');return}
+    toast('가입했어요!');await loadAll();
+    S.forest=id;S.subview='feed';const f=S.forests[id];if(f&&f.channels.length)S.channel=f.channels[0].id;else S.channel=null;saveSes();render()
+  }catch(e){toast('가입 실패','error')}
+}
+
 function goChannel(id){S.channel=id;S.subview='feed';render()}
 function goSub(v,sv){S.view=v;S.subview=sv;render()}
 function go(v,sv){S.view=v;S.subview=sv;render()}
@@ -2278,7 +2365,7 @@ function openDetail(id){
 
 // ═══ 액션 함수들 ═══
 async function like(id){
-  const me=whoAmI();const liked=S.likes.has(id);
+  const me=S.globalAnon?BID:whoAmI();const liked=S.likes.has(id);
   if(liked){S.likes.delete(id);S.likeCounts[id]=Math.max(0,(S.likeCounts[id]||1)-1)}
   else{S.likes.add(id);S.likeCounts[id]=(S.likeCounts[id]||0)+1}
   render();
@@ -2316,7 +2403,7 @@ async function delPost(id){
   try{await sb.from('posts').delete().eq('id',id);toast('삭제됨');S.subview='feed';await loadAll()}catch(e){toast('삭제 실패')}
 }
 async function toggleReaction(pid,emoji){
-  const me=whoAmI();const key=pid+'|'+emoji;const has=S.myReactions.has(key);
+  const me=S.globalAnon?BID:whoAmI();const key=pid+'|'+emoji;const has=S.myReactions.has(key);
   if(has){S.myReactions.delete(key);if(S.reactions[pid]?.[emoji])S.reactions[pid][emoji]--}
   else{S.myReactions.add(key);(S.reactions[pid]=S.reactions[pid]||{})[emoji]=(S.reactions[pid][emoji]||0)+1}
   render();
@@ -2356,18 +2443,176 @@ function toggleMsgReactPop(event,msgId){
   setTimeout(()=>document.addEventListener('click',()=>pop?.remove(),{once:true}),50);
 }
 
-async function addCmt(pid){const inp=document.getElementById('ci-'+pid);if(!inp||!inp.value.trim())return;const content=inp.value.trim();inp.value='';try{await sb.from('comments').insert({post_id:pid,author:S.me||null,anon_nick:S.me?null:anonNick(),content});await loadAll()}catch(e){toast('댓글 실패: '+e.message)}}
+let _cmtImgs={};
+function cmtPickImg(inp,pid){
+  const file=inp.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    _cmtImgs[pid]=e.target.result;
+    var prev=document.getElementById('cmt-preview-'+pid);
+    if(prev){prev.style.display='block';prev.innerHTML='<img src="'+e.target.result+'" style="max-height:80px;border-radius:8px;margin-top:4px"><button onclick="_cmtImgs['+pid+']=null;this.parentElement.style.display=\'none\';this.parentElement.innerHTML=\'\'" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;margin-left:4px">✕</button>'}
+  };
+  reader.readAsDataURL(file);
+}
+function openCmtGif(pid){
+  window._cmtGifTarget=pid;
+  modal('<div class="modal-head"><h2>GIF 검색</h2><button class="modal-x" onclick="closeM()">'+ic('x','sm')+'</button></div><div class="modal-body"><input class="inp" id="cmt-gif-q" placeholder="GIF 검색..." oninput="searchCmtGif()" style="margin-bottom:12px"><div id="cmt-gif-results" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:300px;overflow-y:auto"></div></div>');
+}
+function searchCmtGif(){
+  var q=document.getElementById('cmt-gif-q')?.value||'';
+  var url=q
+    ?'https://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&q='+encodeURIComponent(q)+'&limit=12&rating=g'
+    :'https://api.giphy.com/v1/gifs/trending?api_key=dc6zaTOxFJmzC&limit=12&rating=g';
+  fetch(url).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){
+    var el=document.getElementById('cmt-gif-results');if(!el)return;
+    el.innerHTML=(d.data||[]).map(function(g){var u=g.images?.fixed_height_small?.url||g.images?.fixed_height?.url||'';if(!u)return'';return '<img src="'+u+'" style="width:100%;border-radius:8px;cursor:pointer;object-fit:cover;height:100px" onclick="pickCmtGif(\''+u+'\')">'}).join('');
+  }).catch(function(e){console.error('GIF err:',e)});
+}
+function pickCmtGif(url){
+  var pid=window._cmtGifTarget;
+  _cmtImgs[pid]=url;
+  closeM();
+  var prev=document.getElementById('cmt-preview-'+pid);
+  if(prev){prev.style.display='block';prev.innerHTML='<img src="'+url+'" style="max-height:80px;border-radius:8px"><button onclick="_cmtImgs['+pid+']=null;this.parentElement.style.display=\'none\';this.parentElement.innerHTML=\'\'" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;margin-left:4px">✕</button>'}
+}
+async function addCmt(pid){
+  var inp=document.getElementById('ci-'+pid);
+  var txt=inp?.value?.trim()||'';
+  var img=_cmtImgs[pid]||null;
+  if(!txt&&!img)return;
+  if(inp)inp.value='';
+  var useAnon=S.globalAnon||!S.me;
+  var data={post_id:pid,author:useAnon?null:(S.me||null),anon_nick:useAnon?anonNick():null,content:txt};
+  if(img)data.img=img;
+  try{await sb.from('comments').insert(data);_cmtImgs[pid]=null;var prev=document.getElementById('cmt-preview-'+pid);if(prev){prev.style.display='none';prev.innerHTML=''}await loadAll();toast('댓글 등록!')}catch(e){toast('댓글 실패: '+e.message,'error')}
+}
+function toggleCmtAnon(){S.globalAnon=!S.globalAnon;localStorage.setItem('globalAnon',S.globalAnon?'1':'0');render();toast(S.globalAnon?'익명 모드 ON':'공개 모드','info')}
 async function addReply(pid,parentId){const inp=document.getElementById('ri-'+parentId);if(!inp||!inp.value.trim())return;const content=inp.value.trim();inp.value='';try{await sb.from('comments').insert({post_id:pid,parent_id:parentId,author:S.me||null,anon_nick:S.me?null:anonNick(),content});await loadAll()}catch(e){toast('답글 실패: '+e.message)}}
-async function toggleJoin(id){if(!S.me){toast('로그인 필요');openAuth();return}const joined=S.myForests.has(id);try{if(joined)await sb.from('forest_members').delete().eq('forest_id',id).eq('nick',S.me);else await sb.from('forest_members').insert({forest_id:id,nick:S.me});toast(joined?'탈퇴됨':'가입했어요!');await loadAll()}catch(e){toast('실패')}}
+
+// ═══ 숲 권한 체크 ═══
+function checkForestPerm(forestId,action){
+  const f=S.forests[forestId];if(!f)return true;
+  const cfg=f.config||{};
+  const isMember=S.myForests.has(forestId)||S.myForests.has(Number(forestId))||S.myForests.has(String(forestId));
+  const isOwner=f.owner===S.me;
+  const myRole=(()=>{const m=S.forestRoles&&S.forestRoles[forestId];return m||'member'})();
+  const isAdmin=isOwner||myRole==='admin'||myRole==='moderator';
+
+  if(action==='enter'){
+    if(cfg.members_only&&!isMember&&S.me){toast('멤버 전용 숲이에요','warn');return false}
+    if(cfg.whitelist){
+      const allowed=cfg.whitelist.split(',').map(s=>s.trim()).filter(Boolean);
+      if(allowed.length&&S.me&&!allowed.includes(S.me)&&!isOwner){toast('허용된 유저만 접근 가능해요','warn');return false}
+    }
+    return true;
+  }
+  if(action==='post'){
+    if(cfg.admin_post_only&&!isAdmin){toast('관리자만 글을 쓸 수 있어요','warn');return false}
+    if(cfg.read_only_guests&&!isMember){toast('가입 후 글을 쓸 수 있어요','warn');return false}
+    if(cfg.verified_only&&!S.users[S.me]?.verified){toast('인증된 멤버만 글쓰기 가능해요','warn');return false}
+    return true;
+  }
+  if(action==='anon'){
+    return !!cfg.anonymous_allowed;
+  }
+  if(action==='join'){
+    if(cfg.invite_only){toast('초대 전용 숲이에요','warn');return false}
+    if(cfg.require_approval){requestJoinApproval(forestId);return false}
+    if(cfg.max_members&&f.members>=cfg.max_members&&cfg.max_members>0){toast('정원이 가득 찼어요','warn');return false}
+    return true;
+  }
+  return true;
+}
+
+async function requestJoinApproval(forestId){
+  if(!S.me){toast('로그인 필요');openAuth();return}
+  const f=S.forests[forestId];if(!f)return;
+  // 이미 요청했는지 체크
+  try{
+    const{data:existing}=await sb.from('notifications').select('id').eq('type','join_request').eq('to_nick',f.owner).like('message','%'+S.me+'%').like('message','%'+f.name+'%');
+    if(existing&&existing.length>0){toast('이미 가입 요청을 보냈어요','info');return}
+    // 숲 주인에게 알림 보내기
+    await sb.from('notifications').insert({
+      to_nick:f.owner,
+      type:'join_request',
+      message:S.me+'님이 '+f.name+' 숲에 가입을 요청했어요',
+      read_at:null,
+      action_url:JSON.stringify({action:'join_approve',forest_id:forestId,nick:S.me})
+    });
+    toast('가입 요청을 보냈어요! 승인을 기다려주세요','info');
+  }catch(e){toast('요청 실패','error');console.error(e)}
+}
+
+async function approveJoin(forestId,nick,notifId){
+  try{
+    await ensureProfile();
+    // 프로필 확인
+    const{data:prof}=await sb.from('profiles').select('nick').eq('nick',nick).maybeSingle();
+    if(!prof){await sb.from('profiles').insert({nick:nick,bio:'',avatar:'',verified:false,created_at:new Date().toISOString()})}
+    // 멤버 추가
+    await sb.from('forest_members').insert({forest_id:Number(forestId),nick:nick});
+    // 알림 읽음 처리
+    if(notifId)await sb.from('notifications').update({read_at:new Date().toISOString()}).eq('id',notifId);
+    // 승인된 유저에게 알림
+    const f=S.forests[forestId];
+    await sb.from('notifications').insert({to_nick:nick,type:'system',message:(f?.name||'숲')+' 가입이 승인되었어요! 🎉',read_at:null});
+    toast(nick+'님의 가입을 승인했어요!');
+    await loadAll();
+  }catch(e){toast('승인 실패','error');console.error(e)}
+}
+
+async function rejectJoin(forestId,nick,notifId){
+  try{
+    if(notifId)await sb.from('notifications').update({read_at:new Date().toISOString()}).eq('id',notifId);
+    const f=S.forests[forestId];
+    await sb.from('notifications').insert({to_nick:nick,type:'system',message:(f?.name||'숲')+' 가입이 거절되었어요',read_at:null});
+    toast('거절했어요');
+    await loadAll();
+  }catch(e){console.error(e)}
+}
+window.approveJoin=approveJoin;window.rejectJoin=rejectJoin;window.requestJoinApproval=requestJoinApproval;
+
+async function ensureProfile(){
+  if(!S.me)return;
+  try{
+    const{data}=await sb.from('profiles').select('nick').eq('nick',S.me).maybeSingle();
+    if(!data){
+      await sb.from('profiles').insert({nick:S.me,bio:'',avatar:'',verified:false,created_at:new Date().toISOString()});
+    }
+  }catch(e){console.log('ensureProfile:',e)}
+}
+async function toggleJoin(id){
+  if(!S.me){toast('로그인 필요');openAuth();return}
+  const isMember=S.myForests.has(id)||S.myForests.has(Number(id))||S.myForests.has(String(id));
+  try{
+    if(isMember){
+      // 탈퇴 - 가능한 모든 타입으로 시도
+      await sb.from('forest_members').delete().eq('forest_id',Number(id)).eq('nick',S.me);
+      await sb.from('forest_members').delete().eq('forest_id',String(id)).eq('nick',S.me);
+      toast('탈퇴됨');
+    }else{
+      if(!checkForestPerm(id,'join'))return;
+      await ensureProfile();
+      const{error}=await sb.from('forest_members').insert({forest_id:Number(id),nick:S.me});
+      if(error&&error.code!=='23505'){
+        // FK 에러면 프로필 문제
+        if(error.code==='23503'){toast('프로필 생성 중 문제가 발생했어요','error');console.error(error)}
+        else{toast('가입 실패: '+error.message,'error');console.error(error)}
+      }else toast('가입했어요!');
+    }
+    await loadAll();
+  }catch(e){toast('실패','error');console.error(e)}
+}
+
 async function sendFriendReq(nick){if(!S.me){openAuth();return}try{await sb.from('friend_requests').insert({from_nick:S.me,to_nick:nick});toast('친구 요청을 보냈어요!');await loadAll()}catch(e){toast('이미 보냈거나 실패')}}
 async function acceptFriend(id){try{await sb.from('friend_requests').update({status:'accepted'}).eq('id',id);toast('친구가 되었어요!');await loadAll()}catch(e){toast('실패')}}
 async function rejectFriend(id){try{await sb.from('friend_requests').update({status:'rejected'}).eq('id',id);await loadAll()}catch(e){}}
-async function sendChat(chId){const inp=document.getElementById('chat-inp');if(!inp||!inp.value.trim())return;const msg=inp.value.trim();inp.value='';const forceAnon=S.composeAnon;const title=chatReplyTo?'reply:'+chatReplyTo.id:'';chatReplyTo=null;const row={channel_id:chId,forest_id:S.forest,author:forceAnon?null:S.me,anon_nick:(forceAnon||!S.me)?anonNick():null,title,content:msg,tags:[],imgs:[],files:[]};try{await sb.from('posts').insert(row);await loadAll();setTimeout(()=>{const el=document.getElementById('chat-msgs');if(el)el.scrollTop=el.scrollHeight},100)}catch(e){toast('전송 실패')}}
+async function sendChat(chId){if(S.forest&&!checkForestPerm(S.forest,'post'))return;const inp=document.getElementById('chat-inp');if(!inp||!inp.value.trim())return;const msg=inp.value.trim();inp.value='';const forceAnon=S.composeAnon;const title=chatReplyTo?'reply:'+chatReplyTo.id:'';chatReplyTo=null;const row={channel_id:chId,forest_id:S.forest,author:forceAnon?null:S.me,anon_nick:(forceAnon||!S.me)?anonNick():null,title,content:msg,tags:[],imgs:[],files:[]};try{await sb.from('posts').insert(row);await loadAll();setTimeout(()=>{const el=document.getElementById('chat-msgs');if(el)el.scrollTop=el.scrollHeight},100)}catch(e){toast('전송 실패')}}
 function pickComposeForest(id){composeForestId=id;renderForestDD();renderChDD();closeAllDD()}
 function pickComposeCh(id){composeChId=id;renderChDD();closeAllDD()}
 function toggleDD(id){const m=document.getElementById(id)?.querySelector('.dd-menu');if(!m)return;const open=m.classList.toggle('open');if(open)document.querySelectorAll('.dd-menu.open').forEach(x=>{if(x!==m)x.classList.remove('open')})}
 function closeAllDD(){document.querySelectorAll('.dd-menu.open').forEach(x=>x.classList.remove('open'))}
-function toggleAnon(){S.composeAnon=!S.composeAnon;const sw=document.getElementById('anon-sw');const h=document.getElementById('anon-hint');if(sw)sw.classList.toggle('on',S.composeAnon);if(h)h.textContent=S.composeAnon?'익명으로 게시':'공개로 게시'}
+function toggleAnon(){if(S.forest&&!checkForestPerm(S.forest,'anon')){toast('이 숲은 익명 글쓰기가 허용되지 않아요','warn');return}S.composeAnon=!S.composeAnon;const sw=document.getElementById('anon-sw');const h=document.getElementById('anon-hint');if(sw)sw.classList.toggle('on',S.composeAnon);if(h)h.textContent=S.composeAnon?'익명으로 게시':'공개로 게시'}
 function rich(cmd){const map={bold:'bold',italic:'italic',underline:'underline',strike:'strikeThrough'};document.execCommand(map[cmd],false,null)}
 function openSettings(){openEditProfile()}
 
@@ -2394,6 +2639,15 @@ function openEditProfile(){
       <div style="font-size:12px;color:var(--text3);margin-bottom:16px">아이콘·배너 클릭해서 변경</div>
       <div class="mfield"><label>소개</label><input class="inp" id="edit-bio" value="${escA(u?.bio||'')}" placeholder="한줄 소개"></div>
       <button class="btn btn-primary btn-block" onclick="saveProfile()">저장</button>
+      <div style="margin-top:16px;padding:14px;border-radius:12px;background:var(--card2);border:1px solid var(--line)">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-weight:700;font-size:14px">${ic('eyeOff','sm')} 글로벌 익명 모드</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">댓글, 좋아요, 반응 모두 익명으로</div>
+          </div>
+          <div class="switch ${S.globalAnon?'on':''}" onclick="S.globalAnon=!S.globalAnon;localStorage.setItem('globalAnon',S.globalAnon?'1':'0');openEditProfile();toast(S.globalAnon?'익명 모드 ON':'공개 모드','info')"></div>
+        </div>
+      </div>
       <button class="btn btn-block" style="margin-top:8px;color:var(--like);border:1px solid var(--like);background:transparent" onclick="logout()">로그아웃</button>
     </div>
   </div>`);
@@ -2423,14 +2677,22 @@ function openForestEditModal(id){
       <div class="mfield"><label>소개</label><input class="inp" id="fs-desc" value="${escA(f.description||'')}"></div>
       <div class="mfield">
         <label>테마 색상</label>
-        <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px">${colorSwatches}</div>
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:7px;margin-bottom:10px">${colorSwatches}</div>
         <div style="display:flex;align-items:center;gap:10px">
           <div id="fs-color-preview" style="width:32px;height:32px;border-radius:10px;background:${f.color};cursor:pointer;border:2px solid var(--line2)" onclick="openFsColorPicker()"></div>
           <span style="font-size:12px;color:var(--text3)">직접 선택</span>
           <input type="hidden" id="fs-color" value="${f.color}">
         </div>
       </div>
-      <button class="btn btn-primary btn-block" onclick="saveForest('${id}')">저장</button>
+      <div style="margin-top:16px;font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">권한 설정</div>
+      <div id="fe-perms">
+        ${(()=>{const cfg=f.config||{};const sw=(k,l,d)=>'<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><div style="font-weight:600;font-size:13px">'+l+'</div><div style="font-size:11px;color:var(--text3);margin-top:2px">'+d+'</div></div><div class="switch '+(cfg[k]?'on':'')+'" id="fe-'+k+'" onclick="this.classList.toggle(\'on\')"></div></div>';return sw('require_approval','가입 승인제','관리자 승인 필요')+sw('read_only_guests','비멤버 읽기 전용','비가입자는 글 못 씀')+sw('anonymous_allowed','익명 허용','익명 글쓰기 가능')+sw('invite_only','초대 전용','초대로만 가입')+sw('members_only','멤버 전용','멤버만 접근')+sw('admin_post_only','관리자만 글쓰기','일반은 댓글만')})()}
+      </div>
+      <div class="mfield" style="margin-top:12px">
+        <label>${ic('users','xs')} 허용 유저 (화이트리스트)</label>
+        <input class="inp" id="fe-whitelist" value="${escA((f.config||{}).whitelist||'')}" placeholder="비워두면 모두 접근 가능. 쉼표 구분" style="font-size:13px">
+      </div>
+      <button class="btn btn-primary btn-block" style="margin-top:14px" onclick="saveForest('${id}')">저장</button>
       <div style="margin-top:20px;padding:16px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.25);border-radius:14px;text-align:center">
         <div style="font-size:13px;font-weight:700;color:var(--like);margin-bottom:12px">⚠️ 위험 구역</div>
         <button class="btn" style="background:var(--like);color:#fff;padding:10px 0;border-radius:10px;font-size:14px;font-weight:700;width:100%" onclick="if(confirm('정말 삭제?'))deleteForest('${id}')">🗑️ 숲 삭제</button>
@@ -2735,7 +2997,7 @@ function renderChDD(){
   const f=S.forests[composeForestId];const chs=f?f.channels.filter(c=>c.type==='post'):[];
   if(!composeChId||!chs.find(c=>c.id===composeChId))composeChId=chs[0]?.id||null;
   const ch=chs.find(c=>c.id===composeChId);
-  label.innerHTML=ch?`# ${esc(ch.name)}`:'<span style="color:var(--text3)">채널 없음</span>';
+  label.innerHTML=ch?`# ${esc(ch.name.replace(/^#/,''))}`:'<span style="color:var(--text3)">채널 없음</span>';
   menu.innerHTML=chs.length?chs.map(c=>`<div class="dd-opt ${c.id===composeChId?'on':''}" onclick="pickComposeCh(${c.id})"># ${esc(c.name)}</div>`).join(''):'<div style="padding:12px;font-size:13px;color:var(--text3)">채널이 없어요. 숲 설정에서 추가하세요.</div>';
 }
 
@@ -2836,7 +3098,7 @@ function detailView(){
       ${c.author?`<div class="av sm" onclick="goProfile('${c.author}')"><img src="${avatarOf(c.author)}"></div>`:`<div class="av sm anon">${ic('user','xs')}</div>`}
       <div class="cmt-col">
         <div class="cmt-head"><span class="cmt-nm" ${c.author?`onclick="goProfile('${c.author}')"`:''}>${esc(cnick)}</span>${c.author?getLvBadge(c.author):''}<span class="cmt-time">${ago(c.created_at)}</span></div>
-        <div class="cmt-txt">${parseMentions(renderRich(c.content))}</div>
+        <div class="cmt-txt">${parseMentions(renderRich(c.content))}${c.img?'<div style="margin-top:6px"><img src="'+c.img+'" style="max-height:160px;border-radius:10px;cursor:pointer" onclick="viewImg(\''+c.img+'\')"></div>':''}</div>
         <div class="cmt-actions">
           <span class="cmt-act ${cLiked?'liked':''}" onclick="likeCmt(${c.id})">${ic('heart','xs')} ${cLikeCnt}</span>
           ${!isReply?`<span class="cmt-act" onclick="toggleReply(${c.id})">${ic('comment','xs')} 답글</span>`:''}
@@ -2877,10 +3139,17 @@ function detailView(){
     <div class="detail" id="cmt-sec">
       <div class="cmt-title">댓글 <span>${(p.comments||[]).length}</span></div>
       ${cmts.map(c=>renderCmt(c)).join('')}
-      <div class="cmt-write" style="margin-top:16px">
-        <div class="av sm ${S.me?'':'anon'}">${S.me?`<img src="${avatarOf(S.me)}">`:`${ic('user','xs')}`}</div>
-        <input class="inp" id="ci-${p.id}" placeholder="${S.me?'댓글을 남겨보세요...':'익명으로 댓글 남기기'}" onkeydown="if(event.key==='Enter')addCmt(${p.id})">
-        <button class="cmt-send" onclick="addCmt(${p.id})">${ic('send','xs')}</button>
+      <div id="cmt-preview-${p.id}" style="display:none;padding:8px 12px"></div>
+      <div style="margin-top:8px;background:var(--card2);border:1px solid var(--line);border-radius:22px;display:flex;align-items:center;padding:4px 4px 4px 14px;gap:2px">
+        <div class="av" style="width:26px;height:26px;flex-shrink:0;margin-right:4px">${S.me&&!S.globalAnon?`<img src="${avatarOf(S.me)}" style="width:26px;height:26px;border-radius:50%">`:`<div style="width:26px;height:26px;border-radius:50%;background:var(--card3);display:flex;align-items:center;justify-content:center">${ic('user','xs')}</div>`}</div>
+        <input id="ci-${p.id}" placeholder="${S.globalAnon?'익명으로 댓글 남기기':S.me?'댓글을 남겨보세요...':'익명으로 댓글 남기기'}" onkeydown="if(event.key==='Enter')addCmt(${p.id})" style="flex:1;background:none;border:none;outline:none;font-size:13.5px;color:var(--text);padding:6px 0;min-width:0">
+        <input type="file" id="cmt-img-${p.id}" hidden accept="image/*" onchange="cmtPickImg(this,${p.id})">
+        <div style="display:flex;align-items:center;gap:0;flex-shrink:0">
+          <button onclick="document.getElementById('cmt-img-${p.id}').click()" title="사진" style="background:none;border:none;cursor:pointer;padding:6px;color:var(--text3);border-radius:50%;transition:.15s">${ic('image','xs')}</button>
+          <button onclick="openCmtGif(${p.id})" title="GIF" style="background:none;border:none;cursor:pointer;padding:4px 6px;font-size:10px;font-weight:800;color:var(--text3);border-radius:6px;border:1.5px solid var(--line2)">GIF</button>
+          ${S.me?`<button onclick="toggleCmtAnon()" title="익명" style="background:none;border:none;cursor:pointer;padding:6px;color:${S.globalAnon?'var(--accent)':'var(--text3)'};border-radius:50%">${S.globalAnon?ic('eyeOff','xs'):ic('eye','xs')}</button>`:''}
+          <button onclick="addCmt(${p.id})" style="width:32px;height:32px;border-radius:50%;background:var(--accent);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;margin-left:2px">${ic('send','xs')}</button>
+        </div>
       </div>
     </div>`;
 }
@@ -3059,7 +3328,7 @@ function openFsColorPicker(){
   updateAll();
   setTimeout(()=>document.addEventListener('mousedown',function oc(e){if(!pop.contains(e.target)&&e.target!==swatch){pop.remove();document.removeEventListener('mousedown',oc)}},),100);
 }
-window.fsPick=fsPick;window.openFsColorPicker=openFsColorPicker;
+window.fsPick=fsPick;window.checkForestPerm=checkForestPerm;window.joinAndEnter=joinAndEnter;window.openFsColorPicker=openFsColorPicker;
 
 async function openLikeList(postId){
   // 팝업 먼저 띄우고 로딩 표시
@@ -3145,8 +3414,59 @@ function checkTutorial(){
 window.startTutorial=startTutorial;window.nextTutStep=nextTutStep;window.prevTutStep=prevTutStep;window.skipTutorial=skipTutorial;window.endTutorial=endTutorial;
 window.broadcastTyping=broadcastTyping;
 
+
+
+async function openGroupDM(){
+  if(!S.me){toast('로그인 필요','warn');openAuth();return}
+  const allUsers=Object.keys(S.users).filter(n=>n!==S.me);
+  let html='<div class="modal-head"><h2>'+ic('users','sm')+' 그룹 DM 만들기</h2><button class="modal-x" onclick="closeM()">'+ic('x','sm')+'</button></div>';
+  html+='<div class="modal-body">';
+  html+='<div class="mfield"><label>멤버 검색</label><input class="inp" id="gdm-search" placeholder="닉네임 검색..." oninput="filterGDMUsers()"></div>';
+  html+='<div id="gdm-selected" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>';
+  html+='<div id="gdm-list" style="max-height:240px;overflow-y:auto">';
+  allUsers.forEach(function(n){
+    html+='<div class="member-item" onclick="toggleGDMUser(\''+n+'\')">';
+    html+='<div class="av-wrap"><div class="av"><img src="'+avatarOf(n)+'"></div></div>';
+    html+='<div class="mem-info"><div class="mem-name">'+esc(n)+'</div></div>';
+    html+='<div id="gdm-chk-'+n+'" style="width:20px;height:20px;border-radius:6px;border:2px solid var(--line2);display:flex;align-items:center;justify-content:center"></div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  html+='<button class="btn btn-primary btn-block" style="margin-top:14px" onclick="createGroupDM()">그룹 DM 시작</button>';
+  html+='</div>';
+  modal(html);
+  window._gdmUsers=new Set();
+}
+function toggleGDMUser(nick){
+  if(!window._gdmUsers)window._gdmUsers=new Set();
+  if(window._gdmUsers.has(nick))window._gdmUsers.delete(nick);else window._gdmUsers.add(nick);
+  var chk=document.getElementById('gdm-chk-'+nick);
+  if(chk)chk.innerHTML=window._gdmUsers.has(nick)?'<span style="color:var(--accent);font-weight:800">✓</span>':'';
+  var sel=document.getElementById('gdm-selected');
+  if(sel){
+    var h='';
+    window._gdmUsers.forEach(function(n){
+      h+='<span style="padding:4px 10px;border-radius:8px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px">'+esc(n)+' <span onclick="event.stopPropagation();toggleGDMUser(\''+n+'\')" style="cursor:pointer;opacity:.6">✕</span></span>';
+    });
+    sel.innerHTML=h;
+  }
+}
+function filterGDMUsers(){
+  var q=(document.getElementById('gdm-search')?.value||'').toLowerCase();
+  var items=document.querySelectorAll('#gdm-list .member-item');
+  items.forEach(function(el){var name=el.querySelector('.mem-name')?.textContent?.toLowerCase()||'';el.style.display=name.includes(q)?'':'none'});
+}
+async function createGroupDM(){
+  if(!window._gdmUsers||window._gdmUsers.size<1){toast('1명 이상 선택하세요','warn');return}
+  for(var target of window._gdmUsers){
+    try{await sb.from('dms').insert({from_nick:S.me,to_nick:target,content:'그룹 DM이 시작되었어요!'})}catch(e){}
+  }
+  closeM();toast('그룹 DM 시작!');await loadAll();
+}
+window.openGroupDM=openGroupDM;window.toggleGDMUser=toggleGDMUser;window.filterGDMUsers=filterGDMUsers;window.createGroupDM=createGroupDM;window.chatAttachFile=chatAttachFile;window.dmAttachFile=dmAttachFile;
+
 // ═══ GLOBAL EXPORTS ═══
-Object.assign(window,{render,goHome,goForest,goChannel,goSub,go,goProfile,goBack,openDetail,doSearch,openDM,openFindForest,like,toggleBookmark,likeCmt,toggleReply,addCmt,addReply,delPost,follow,toggleJoin,toggleReaction,toggleReactPop,share,viewImg,downloadFile,sendFriendReq,acceptFriend,rejectFriend,sendDM,sendChat,setChatReply,clearChatReply,scrollToMsg,toggleMsgReactPop,openCompose,renderForestDD,renderChDD,pickComposeForest,pickComposeCh,toggleDD,closeAllDD,toggleAnon,rich,pickImg,pickFile,drawPreview,submitPost,openAuth,doAuth,openEditProfile,uploadAvatar,uploadBanner,saveProfile,logout,openSettings,toggleTheme,openCreateForest,_renderCreateForest,_setModalContent,pickNfTemplate,pickNfStep,pickNfColor,pickNfEmoji,previewForestIcon,previewForestBanner,createForest,openForestSettings,openForestEditModal,pickFSType,previewEditIcon,previewEditBanner,saveForest,addChannel,openAddChannel,pickChType,openEdit,saveEdit,closeM,toggleMemberPanel,togglePinPanel,toggleNotifPanel,closeSidePanel,openGifPop,insertChatEmoji,toggleChatEmoji,chatAttachImg,openNfColorPicker,
+Object.assign(window,{render,goHome,goForest,goChannel,goSub,go,goProfile,goBack,openDetail,doSearch,openDM,openFindForest,like,toggleBookmark,likeCmt,toggleReply,addCmt,addReply,delPost,follow,toggleJoin,toggleReaction,toggleReactPop,share,viewImg,downloadFile,sendFriendReq,acceptFriend,rejectFriend,sendDM,sendChat,setChatReply,clearChatReply,scrollToMsg,toggleMsgReactPop,openCompose,renderForestDD,renderChDD,pickComposeForest,pickComposeCh,toggleDD,closeAllDD,toggleAnon,toggleCmtAnon,cmtPickImg,openCmtGif,searchCmtGif,pickCmtGif,rich,pickImg,pickFile,drawPreview,submitPost,openAuth,doAuth,openEditProfile,uploadAvatar,uploadBanner,saveProfile,logout,openSettings,toggleTheme,openCreateForest,_renderCreateForest,_setModalContent,pickNfTemplate,pickNfStep,pickNfColor,pickNfEmoji,previewForestIcon,previewForestBanner,createForest,openForestSettings,openForestEditModal,pickFSType,previewEditIcon,previewEditBanner,saveForest,addChannel,openAddChannel,pickChType,openEdit,saveEdit,closeM,toggleMemberPanel,togglePinPanel,toggleNotifPanel,closeSidePanel,openGifPop,insertChatEmoji,toggleChatEmoji,chatAttachImg,openNfColorPicker,
   cdd,toggleCDD,pickCDD,
   searchByTag,votePoll,renderPoll,toggleSubscribe,blockUser,unblockUser,reportPost,reportUser,setMemberRole,getRoleBadge,markAllNotifRead,saveDraft,loadDrafts,openDrafts,restoreDraft,openSchedulePicker,setSchedule,parseMentions,deleteDM,dmAttachImg,setVisibility,addComposePoll,renderComposePoll,
   setupMentionAutocomplete,pickMention,closeMentionPop,editMemo,saveMemo,_setPanelBlur,
