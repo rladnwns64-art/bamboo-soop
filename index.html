@@ -815,7 +815,7 @@ textarea.inp{min-height:100px;resize:vertical;line-height:1.55}
 import{createClient}from'https://esm.sh/@supabase/supabase-js@2';
 const SB_URL='https://xbvjxxhqjlrackpejbuk.supabase.co';
 const SB_KEY='sb_publishable_jU6yK6Lsro7eaGNi8WZPrw_4FuU4WRr';
-const sb=createClient(SB_URL,SB_KEY);
+const sb=createClient(SB_URL,SB_KEY);window.sb=sb;
 
 // ═══ SVG 아이콘 (Lucide 스타일, 깔끔하게) ═══
 const I={
@@ -861,6 +861,7 @@ const I={
   clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
   save:'<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
   folder:'<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+  flag:'<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
   eyeOff:'<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
 };
 const ic=(n,c='')=>`<svg class="ico ${c}" viewBox="0 0 24 24">${I[n]||''}</svg>`;
@@ -1581,6 +1582,7 @@ function pcard(p){
         </div>
       </div>
       <button class="act ${bookmarked?'liked':''}" onclick="event.stopPropagation();toggleBookmark(${p.id})">${ic('bookmark',bookmarked?'sm fill':'sm')}</button>
+      ${p.author===S.me||(JSON.parse(localStorage.getItem('myAnonPosts')||'[]')).includes(p.id)?`<button class="act" onclick="event.stopPropagation();deletePost(${p.id})" title="삭제" style="color:var(--like)">${ic('trash','xs')}</button>`:`<button class="act" onclick="event.stopPropagation();reportPost(${p.id})" title="신고">${ic('flag','xs')}</button>`}
       ${(p.author&&p.author===S.me)||((!p.author)&&p.anon_key&&p.anon_key===localStorage.getItem('anon_key'))?`<button class="btn-icon" onclick="event.stopPropagation();openEdit(${p.id})">${ic('edit','xs')}</button><button class="btn-icon danger" onclick="event.stopPropagation();if(confirm('삭제?'))delPost(${p.id})">${ic('trash','xs')}</button>`:''}
     </div>
   </div>`;
@@ -1735,7 +1737,7 @@ function memberPanel(){
     const role=(S.memberRoles[S.forest]||{})[nick];
     const roleBadge=role==='owner'?`<span class="mem-role owner">👑</span>`:role==='mod'?`<span class="mem-role mod">🛡</span>`:'';
     const isOwner=f.owner===S.me;
-    const roleBtn=isOwner&&nick!==S.me?`<button onclick="event.stopPropagation();setMemberRole('${f.id}','${nick}',${role==='mod'?`'member'`:`'mod'`})" style="font-size:10px;padding:2px 6px;border-radius:5px;background:var(--card3);color:var(--text3);margin-left:4px">${role==='mod'?'해제':'관리자'}</button>`:'';
+    const roleBtn=isOwner&&nick!==S.me?`<button onclick="event.stopPropagation();setMemberRole('${f.id}','${nick}',${role==='mod'?`'member'`:`'mod'`})" style="font-size:10px;padding:3px 8px;border-radius:6px;background:${role==='mod'?'var(--accent-soft)':'var(--card3)'};color:${role==='mod'?'var(--accent)':'var(--text3)'};border:1px solid ${role==='mod'?'var(--accent)':'var(--line)'};cursor:pointer;white-space:nowrap">${role==='mod'?'관리자 해제':'관리자 임명'}</button>`:'';
     return `<div class="member-item" onclick="goProfile('${nick}')"><div class="av-wrap"><div class="av"><img src="${avatarOf(nick)}"></div><div class="status-ring ${statusClass}"></div></div><div class="mem-info"><div class="mem-name ${isOnline?'':'offline-name'}">${esc(nick)} ${roleBadge}</div><div class="mem-status">${statusText}</div></div>${roleBtn}</div>`;
   };
   const onlineHtml=online.length?`<div class="member-section-label">온라인 — ${online.length}</div>${online.map(n=>memItem(n,true)).join('')}`:'';
@@ -1789,10 +1791,10 @@ async function searchGif(q){
     const results=(await res.json()).data||[];
     if(!results.length){grid.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3)">결과 없음</div>';return}
     grid.innerHTML=results.map(r=>{
-      const thumb=r.images?.fixed_width_small_still?.url||r.images?.fixed_width_small?.url||'';
-      const full=r.images?.fixed_width?.url||r.images?.original?.url||thumb;
+      const thumb=r.images?.preview_gif?.url||r.images?.fixed_width_small?.url||r.images?.fixed_width?.url||'';
+      const full=r.images?.fixed_width?.url||r.images?.downsized?.url||thumb;
       if(!thumb)return'';
-      return '<div onclick="sendGif(\''+full.replace(/'/g,'%27')+'\')" style="cursor:pointer;border-radius:8px;overflow:hidden;margin-bottom:5px;break-inside:avoid" onmouseover="this.querySelector(\'img\').src=\''+full.replace(/'/g,'%27')+'\'" onmouseout="this.querySelector(\'img\').src=\''+thumb.replace(/'/g,'%27')+'\'"><img src="'+thumb+'" style="width:100%;display:block" loading="lazy"></div>';
+      return '<div onclick="sendGif(\''+full.replace(/'/g,'%27')+'\')" style="cursor:pointer;border-radius:8px;overflow:hidden;margin-bottom:5px;break-inside:avoid;transition:transform .1s" onmouseover="this.style.transform=\'scale(1.03)\'" onmouseout="this.style.transform=\'\'"><img src="'+thumb+'" style="width:100%;display:block;border-radius:8px" loading="lazy"></div>';
     }).join('');
   }catch(e){grid.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3)">실패</div>'}
 }
@@ -2026,7 +2028,7 @@ async function dmAttachFile(inp){
     if(file.type.startsWith('image/')){dmAttachImg({files:[file]});continue}
     const reader=new FileReader();
     reader.onload=async e=>{
-      try{await sb.from('dms').insert({from_nick:S.me,to_nick:S.dmTarget,content:'📎 '+file.name,files:[{name:file.name,data:e.target.result}]});await loadAll()}catch(err){toast('파일 전송 실패','error')}
+      try{await sb.from('direct_messages').insert({from_nick:S.me,to_nick:S.dmTarget,content:'📎 '+file.name,files:[{name:file.name,data:e.target.result}]});await loadAll()}catch(err){toast('파일 전송 실패','error')}
     };
     reader.readAsDataURL(file);
   }
@@ -2149,7 +2151,8 @@ async function submitPost(){
   try{const testCols={};if(pFiles.length)testCols.files=JSON.stringify(pFiles.map(f=>({name:f.name})));if(S._postVisibility&&S._postVisibility!=='public')testCols.visibility=S._postVisibility;if(S._composePoll?.question&&S._composePoll.options.filter(Boolean).length>=2)testCols.poll=JSON.stringify({question:S._composePoll.question,options:S._composePoll.options.filter(Boolean)});if(S._scheduleTime)testCols.scheduled_at=new Date(S._scheduleTime).toISOString();Object.assign(row,testCols)}catch(e){}
   closeM();
   try{
-    const {error}=await sb.from('posts').insert(row);
+    const{data:insResult,error}=await sb.from('posts').insert(row).select('id');
+    if(S.composeAnon&&insResult&&insResult[0]){const ma=JSON.parse(localStorage.getItem('myAnonPosts')||'[]');ma.push(insResult[0].id);localStorage.setItem('myAnonPosts',JSON.stringify(ma))}
     if(error)throw error;
     pImgs=[];pFiles=[];
     toast(S._scheduleTime?`예약 게시됨`:'게시됐어요!');
@@ -2200,6 +2203,7 @@ async function saveForest(id){
   }catch(e){toast('실패: '+e.message)}
 }
 async function createForest(){
+  await ensureProfile();
   const name=nfName||document.getElementById('nf-name')?.value.trim();
   if(!name){toast('숲 이름을 입력하세요');return}
   if(!S.me){toast('로그인 필요');openAuth();return}
@@ -2488,10 +2492,10 @@ function searchCmtGif(){
     var results=d.data||[];
     if(!results.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3)">결과 없음</div>';return}
     el.innerHTML=results.map(function(g){
-      var thumb=g.images?.fixed_width_small_still?.url||g.images?.fixed_width_small?.url||'';
-      var full=g.images?.fixed_width?.url||g.images?.original?.url||thumb;
+      var thumb=g.images?.preview_gif?.url||g.images?.fixed_width_small?.url||g.images?.fixed_width?.url||'';
+      var full=g.images?.fixed_width?.url||g.images?.downsized?.url||thumb;
       if(!thumb)return'';
-      return '<div style="break-inside:avoid;margin-bottom:5px;border-radius:8px;overflow:hidden;cursor:pointer" onclick="pickCmtGif(\''+full.replace(/'/g,'%27')+'\')" onmouseover="this.querySelector(\'img\').src=\''+full.replace(/'/g,'%27')+'\'" onmouseout="this.querySelector(\'img\').src=\''+thumb.replace(/'/g,'%27')+'\'"><img src="'+thumb+'" style="width:100%;display:block" loading="lazy"></div>'
+      return '<div style="break-inside:avoid;margin-bottom:5px;border-radius:8px;overflow:hidden;cursor:pointer;transition:transform .1s" onclick="pickCmtGif(\''+full.replace(/'/g,'%27')+'\')" onmouseover="this.style.transform=\'scale(1.03)\'" onmouseout="this.style.transform=\'\'"><img src="'+thumb+'" style="width:100%;display:block;border-radius:8px" loading="lazy"></div>'
     }).join('');
   }).catch(function(e){
     console.error('GIF:',e);
@@ -2749,7 +2753,8 @@ function renderPoll(post){const poll=post.poll;if(!poll||!poll.options)return ''
 async function toggleSubscribe(postId){if(!S.me){toast('로그인 필요');return}const on=S.postSubscriptions.has(postId);try{if(on){await sb.from('post_subscriptions').delete().eq('post_id',postId).eq('nick',S.me);S.postSubscriptions.delete(postId);toast('구독 해제됨')}else{await sb.from('post_subscriptions').insert({post_id:postId,nick:S.me});S.postSubscriptions.add(postId);toast('구독됨')}render()}catch(e){toast('실패')}}
 async function blockUser(nick){if(!S.me){toast('로그인 필요');return}if(!confirm(`${nick}님을 차단할까요?`))return;try{await sb.from('blocked_users').insert({blocker:S.me,blocked:nick})}catch(e){}S.blockedUsers.add(nick);toast(`${nick}님을 차단했어요`);render()}
 async function unblockUser(nick){if(!S.me)return;try{await sb.from('blocked_users').delete().eq('blocker',S.me).eq('blocked',nick);S.blockedUsers.delete(nick);toast('차단 해제됨');render()}catch(e){}}
-async function reportPost(postId){if(!S.me){toast('로그인 필요');return}const reason=prompt('신고 이유:');if(!reason)return;try{await sb.from('reports').insert({reporter:S.me,post_id:postId,reason})}catch(e){}toast('신고 접수됨')}
+async function reportPost(postId){const reason=prompt('신고 사유를 입력하세요:');if(!reason)return;try{await sb.from('reports').insert({reporter:whoAmI(),post_id:postId,reason});toast('신고 접수됨')}catch(e){toast('신고 실패','error')}}
+async function deletePost(id){if(!confirm('정말 삭제하시겠어요?'))return;try{await sb.from('posts').delete().eq('id',id);const ma=JSON.parse(localStorage.getItem('myAnonPosts')||'[]').filter(x=>x!==id);localStorage.setItem('myAnonPosts',JSON.stringify(ma));toast('삭제됨');S.subview='feed';await loadAll()}catch(e){toast('삭제 실패','error')}}
 async function reportUser(nick){if(!S.me){toast('로그인 필요');return}const reason=prompt(`${nick}님 신고 이유:`);if(!reason)return;try{await sb.from('reports').insert({reporter:S.me,reported_nick:nick,reason})}catch(e){}toast('신고 접수됨')}
 async function setMemberRole(forestId,nick,role){const f=S.forests[forestId];if(!f||f.owner!==S.me){toast('숲주인만 역할을 바꿀 수 있어요');return}try{await sb.from('forest_members').update({role}).eq('forest_id',forestId).eq('nick',nick);toast(`${nick}님의 역할을 ${role}로 변경했어요`);await loadAll()}catch(e){toast('실패')}}
 function getRoleBadge(forestId,nick){const role=(S.memberRoles[forestId]||{})[nick];if(role==='owner')return `<span class="role-owner">👑 숲주인</span>`;if(role==='mod')return `<span class="role-mod">🛡 관리자</span>`;return ''}
@@ -3163,6 +3168,7 @@ function detailView(){
         <button class="d-act ${bookmarked?'bookmarked':''}" onclick="toggleBookmark(${p.id})">${ic('bookmark','sm')} ${bookmarked?'저장됨':'저장'}</button>
         <button class="d-act ${subscribed?'bookmarked':''}" onclick="toggleSubscribe(${p.id})">${ic('bell','sm')} ${subscribed?'구독 중':'구독'}</button>
         <button class="d-act" onclick="share(${p.id})">${ic('share','sm')} 공유</button>
+        ${(()=>{const isMyAnon=(JSON.parse(localStorage.getItem('myAnonPosts')||'[]')).includes(p.id);const isMine=p.author===S.me||isMyAnon;return isMine?'<button class="d-act" onclick="deletePost('+p.id+')" style="color:var(--like)">'+ic('trash','sm')+' 삭제</button>':'<button class="d-act" onclick="reportPost('+p.id+')" style="color:var(--text3)">'+ic('flag','sm')+' 신고</button>'})()}
         ${!p.author||p.author!==S.me?`<button class="d-act" onclick="reportPost(${p.id})" style="color:var(--text3)">${ic('eye','xs')} 신고</button>`:''}
       </div>
       ${rxRow}
@@ -3359,6 +3365,7 @@ function openFsColorPicker(){
   updateAll();
   setTimeout(()=>document.addEventListener('mousedown',function oc(e){if(!pop.contains(e.target)&&e.target!==swatch){pop.remove();document.removeEventListener('mousedown',oc)}},),100);
 }
+window.reportPost=reportPost;window.deletePost=deletePost;
 window.fsPick=fsPick;window.checkForestPerm=checkForestPerm;window.joinAndEnter=joinAndEnter;window.openFsColorPicker=openFsColorPicker;
 
 async function openLikeList(postId){
@@ -3490,7 +3497,7 @@ function filterGDMUsers(){
 async function createGroupDM(){
   if(!window._gdmUsers||window._gdmUsers.size<1){toast('1명 이상 선택하세요','warn');return}
   for(var target of window._gdmUsers){
-    try{await sb.from('dms').insert({from_nick:S.me,to_nick:target,content:'그룹 DM이 시작되었어요!'})}catch(e){}
+    try{await sb.from('direct_messages').insert({from_nick:S.me,to_nick:target,content:'그룹 DM이 시작되었어요!'})}catch(e){}
   }
   closeM();toast('그룹 DM 시작!');await loadAll();
 }
