@@ -138,17 +138,23 @@ img{max-width:100%}svg{display:inline-block;vertical-align:middle}
 .pin-item .pin-meta{font-size:11.5px;color:var(--text3);margin-bottom:4px;display:flex;align-items:center;gap:5px}
 .pin-item .pin-txt{font-size:13.5px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .pin-item .pin-img{width:100%;border-radius:8px;margin-top:6px;max-height:120px;object-fit:cover}
-.notif-item{display:flex;gap:12px;padding:12px;border-radius:12px;cursor:pointer;transition:.15s;position:relative}
-.notif-icon{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;background:var(--card2)}
-.notif-icon.cmt{background:#dbeafe;color:#2563eb}
-.notif-icon.like{background:#fce7f3;color:#ec4899}
-.notif-icon.join{background:#d1fae5;color:#059669}
-.notif-icon.friend{background:#fef3c7;color:#d97706}
-.notif-icon.sys{background:var(--card2);color:var(--text3)}
-.ntxt{font-size:13.5px;line-height:1.45;color:var(--text)}
-.ntxt b{font-weight:700}
-.ntime{font-size:11px;color:var(--text3);margin-top:3px}
-.notif-sep{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;padding:14px 12px 6px}
+.notif-item{display:flex;gap:12px;padding:14px 16px;border-radius:14px;cursor:pointer;transition:.15s;position:relative;margin:2px 0}
+.notif-item:hover{background:var(--hover)}
+.notif-item.unread{background:var(--accent-soft)}
+.notif-item.unread::before{content:'';position:absolute;left:6px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.n-avi{width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px}
+.n-avi.cmt{background:linear-gradient(135deg,#dbeafe,#bfdbfe)}
+.n-avi.like{background:linear-gradient(135deg,#fce7f3,#fbcfe8)}
+.n-avi.join{background:linear-gradient(135deg,#d1fae5,#a7f3d0)}
+.n-avi.friend{background:linear-gradient(135deg,#fef3c7,#fde68a)}
+.n-avi.sys{background:linear-gradient(135deg,var(--card2),var(--card3))}
+.n-body{flex:1;min-width:0}
+.n-txt{font-size:13.5px;line-height:1.5;color:var(--text)}
+.n-txt b{font-weight:700}
+.n-time{font-size:11px;color:var(--text3);margin-top:4px}
+.n-sep{font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:1px;padding:18px 16px 6px}
+.n-actions{display:flex;gap:6px;margin-top:8px}
+.n-actions .btn{font-size:12px;padding:6px 14px;border-radius:8px}
 .notif-item:hover{background:var(--hover)}
 .notif-item.unread::before{content:'';position:absolute;left:2px;top:50%;transform:translateY(-50%);width:6px;height:6px;border-radius:50%;background:var(--accent)}
 .notif-icon{width:38px;height:38px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px}
@@ -875,7 +881,7 @@ let S={me:null,view:'home',subview:'feed',forest:null,channel:null,q:'',
   _dmImg:null,_composePoll:null,_composeDraft:null,_scheduleTime:null,_postVisibility:'public'};
 
 function bid(){let id=localStorage.getItem('bid');if(!id){id='g_'+Math.random().toString(36).slice(2,9);localStorage.setItem('bid',id)}return id}
-const BID=bid();const whoAmI=()=>S.me||BID;
+const BID=bid().slice(0,20);const whoAmI=()=>S.me||BID;
 async function loadSes(){
   // 테마/포레스트 복원
   S.forest=localStorage.getItem('forest')||null;
@@ -1011,25 +1017,25 @@ function renderRich(h){return sanitize(h||'')}
 
 // ═══ DATA LOADING ═══
 async function loadAll(){
-  S.loading=true;render();
+  S.loading=true;
   try{
     const safe=q=>q.then(r=>r).catch(()=>({data:[],error:null}));
     const [pf,po,cm,lk,fl,fr,fm,ch,cl,bm,rc,frq,dm,pv,notif,subs,blk]=await Promise.all([
       safe(sb.from('profiles').select('*')),
-      safe(sb.from('posts').select('*').order('created_at',{ascending:false})),
-      safe(sb.from('comments').select('*').order('created_at',{ascending:true})),
-      safe(sb.from('likes').select('post_id,liker')),
-      safe(sb.from('follows').select('follower,followee')),
+      safe(sb.from('posts').select('*').order('created_at',{ascending:false}).limit(300)),
+      safe(sb.from('comments').select('*').order('created_at',{ascending:true}).limit(1000)),
+      safe(sb.from('likes').select('*')),
+      safe(sb.from('follows').select('*')),
       safe(sb.from('forests').select('*').order('created_at',{ascending:true})),
-      safe(sb.from('forest_members').select('forest_id,nick,role')),
+      safe(sb.from('forest_members').select('*')),
       safe(sb.from('channels').select('*').order('position',{ascending:true})),
-      safe(sb.from('comment_likes').select('comment_id,liker')),
-      safe(sb.from('bookmarks').select('post_id,nick')),
-      safe(sb.from('reactions').select('post_id,reactor,emoji')),
+      safe(sb.from('comment_likes').select('*')),
+      safe(sb.from('bookmarks').select('*')),
+      safe(sb.from('reactions').select('*')),
       safe(sb.from('friend_requests').select('*')),
-      safe(sb.from('direct_messages').select('*').order('created_at',{ascending:true})),
+      safe(sb.from('direct_messages').select('*').order('created_at',{ascending:true}).limit(300)),
       safe(sb.from('poll_votes').select('*')),
-      safe(sb.from('notifications').select('*').order('created_at',{ascending:false})),
+      safe(sb.from('notifications').select('*').order('created_at',{ascending:false}).limit(100)),
       safe(sb.from('post_subscriptions').select('*')),
       safe(sb.from('blocked_users').select('*')),
     ]);
@@ -1409,8 +1415,8 @@ function toggleDMReactPop(e,id){
   const emojis=['👍','❤️','😂','😮','😢','🔥','👏','🎉'];
   let pop=document.getElementById('dm-react-pop');if(pop){pop.remove();return}
   pop=document.createElement('div');pop.id='dm-react-pop';
-  pop.style.cssText=`position:fixed;top:${e.clientY-50}px;left:${e.clientX-80}px;background:var(--card);border:1px solid var(--line2);border-radius:12px;padding:6px;display:flex;gap:4px;z-index:600;box-shadow:var(--shadow2);animation:pop .15s ease`;
-  pop.innerHTML=emojis.map(em=>`<button style="font-size:20px;width:36px;height:36px;border-radius:8px;transition:.1s" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="addDMReaction(${id},'${em}');this.closest('#dm-react-pop').remove()">${em}</button>`).join('');
+  pop.style.cssText=`position:fixed;top:${Math.max(8,e.clientY-50)}px;left:${Math.min(Math.max(8,e.clientX-120),window.innerWidth-300)}px;background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:6px 8px;display:flex;gap:2px;z-index:600;box-shadow:0 8px 24px rgba(0,0,0,0.2);animation:pop .15s ease`;
+  pop.innerHTML=emojis.map(em=>`<button style="font-size:18px;width:32px;height:32px;border-radius:8px;transition:.1s;font-family:sans-serif" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="addDMReaction(${id},'${em}');this.closest('#dm-react-pop').remove()">${em}</button>`).join('');
   document.body.appendChild(pop);
   setTimeout(()=>document.addEventListener('click',()=>pop?.remove(),{once:true}),50);
 }
@@ -1424,10 +1430,10 @@ function openDMGif(){
   const existing=document.getElementById('gif-pop-el');if(existing){existing.remove();document.getElementById('gif-ov')?.remove();return}
   const pop=document.createElement('div');pop.id='gif-pop-el';
   pop.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--card);border:1px solid var(--line2);border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.35);z-index:2000;width:420px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;animation:modalPop .2s ease';
-  pop.innerHTML=`<div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)"><span style="font-weight:800;font-size:14px">GIF</span><input id="gif-search" class="inp" placeholder="GIF 검색..." style="flex:1;padding:7px 12px;font-size:13px;border-radius:10px" oninput="searchGif(this.value)"><button onclick="document.getElementById('gif-pop-el')?.remove();document.getElementById('gif-ov')?.remove()" style="color:var(--text3)">${ic('x','sm')}</button></div><div id="gif-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:8px;overflow-y:auto;flex:1"><div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text3)">불러오는 중...</div></div>`;
+  pop.innerHTML=`<div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)"><span style="font-weight:800;font-size:14px">GIF</span><input id="gif-search" class="inp" placeholder="GIF 검색..." style="flex:1;padding:7px 12px;font-size:13px;border-radius:10px" oninput="gifSearchDebounce(this.value)"><button onclick="document.getElementById('gif-pop-el')?.remove();document.getElementById('gif-ov')?.remove()" style="color:var(--text3)">${ic('x','sm')}</button></div><div id="gif-grid" style="columns:2;column-gap:6px;padding:8px;overflow-y:auto;flex:1"><div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text3)">불러오는 중...</div></div>`;
   document.body.appendChild(pop);
   const ov=document.createElement('div');ov.id='gif-ov';ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1999;backdrop-filter:blur(2px)';ov.onclick=()=>{pop.remove();ov.remove()};document.body.appendChild(ov);
-  setTimeout(()=>{document.getElementById('gif-search')?.focus();searchGif('trending')},50);
+  setTimeout(()=>{document.getElementById('gif-search')?.focus();searchGif('trending')},100);
 }
 // DM용 sendGif 오버라이드
 const _origSendGif=window.sendGif;
@@ -1665,52 +1671,52 @@ function pinPanel(){
 
 function notifPanel(){
   if(!S._notifOpen)return '';
-  // 알림 데이터 생성 (DB + 활동 기반 통합)
   const notifs=[];
   // DB 알림
   S.notifications.forEach(n=>{
     if(n.type==='join_request'&&!n.read_at){
-      let actionData=null;try{actionData=JSON.parse(n.action_url)}catch(e){}
-      if(actionData&&actionData.action==='join_approve'){
-        notifs.push({type:'join_request',iconClass:'join',icon:'📬',txt:n.message||'가입 요청',time:n.created_at,unread:true,id:n.id,
-          customHtml:'<div style="display:flex;gap:6px;margin-top:8px"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();approveJoin(\''+actionData.forest_id+'\',\''+actionData.nick+'\','+n.id+')">승인</button><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();rejectJoin(\''+actionData.forest_id+'\',\''+actionData.nick+'\','+n.id+')">거절</button></div>'});
-      }else{
-        notifs.push({type:n.type||'system',icon:'🔔',txt:n.message||'알림',time:n.created_at,unread:!n.read_at,id:n.id});
+      let ad=null;try{ad=JSON.parse(n.action_url)}catch(e){}
+      if(ad&&ad.action==='join_approve'){
+        notifs.push({cls:'join',icon:'👋',txt:n.message||'가입 요청',time:n.created_at,unread:true,id:n.id,
+          actions:'<div class="n-actions"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();approveJoin(\''+ad.forest_id+'\',\''+ad.nick+'\','+n.id+')">승인</button><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();rejectJoin(\''+ad.forest_id+'\',\''+ad.nick+'\','+n.id+')">거절</button></div>'});
+        return;
       }
-    }else{
-      notifs.push({type:n.type||'system',icon:n.type==='comment'?'💬':n.type==='like'?'❤️':n.type==='mention'?'@':n.type==='friend'?'👋':'🔔',txt:n.message||'알림',time:n.created_at,unread:!n.read_at,id:n.id,action:n.action_url&&n.type!=='join_request'?'go(\'home\',\'detail\')':null});
     }
+    const ic=n.type==='comment'?'💬':n.type==='like'?'❤️':n.type==='mention'?'💡':n.type==='friend'?'👋':'🔔';
+    const cls=n.type==='comment'?'cmt':n.type==='like'?'like':n.type==='friend'?'friend':'sys';
+    notifs.push({cls,icon:ic,txt:n.message||'알림',time:n.created_at,unread:!n.read_at,id:n.id});
   });
   // 친구 요청
   S.friendReqs.forEach(r=>{
-    notifs.push({type:'friend',iconClass:'friend',icon:'👋',txt:`<b>${esc(r.from_nick)}</b>님이 친구 요청을 보냈어요`,time:r.created_at,unread:true,action:`acceptFriend(${r.id})`});
+    notifs.push({cls:'friend',icon:'🤝',txt:'<b>'+esc(r.from_nick)+'</b>님이 친구 요청을 보냈어요',time:r.created_at,unread:true,
+      actions:'<div class="n-actions"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();acceptFriend('+r.id+')">수락</button></div>'});
   });
-  // 내 글에 달린 최근 댓글
+  // 내 글 댓글
   if(S.me){
-    const myPosts=S.posts.filter(p=>p.author===S.me);
-    myPosts.forEach(p=>{
-      (p.comments||[]).filter(c=>c.author!==S.me).slice(0,2).forEach(c=>{
-        notifs.push({type:'comment',iconClass:'cmt',icon:'💬',txt:`<b>${esc(c.author||'익명')}</b>님이 <b>${esc((p.title||plainText(p.content)).slice(0,20))}</b>에 댓글을 남겼어요`,time:c.created_at,unread:false,action:`openDetail(${p.id})`});
+    const myP=S.posts.filter(p=>p.author===S.me);
+    myP.forEach(p=>{
+      (p.comments||[]).filter(c=>c.author!==S.me).slice(-2).forEach(c=>{
+        const preview=(p.title||plainText(p.content)||'').slice(0,15);
+        notifs.push({cls:'cmt',icon:'💬',txt:'<b>'+esc(c.author||'익명')+'</b>님이 <b>'+esc(preview)+'</b>에 댓글을 남김',time:c.created_at,unread:false,action:'openDetail('+p.id+')'});
       });
     });
-    // 내 글 좋아요 (likeCounts 기반 간이)
-    myPosts.filter(p=>(S.likeCounts[p.id]||0)>0).slice(0,3).forEach(p=>{
-      notifs.push({type:'like',iconClass:'like',icon:'❤️',txt:`<b>${esc((p.title||plainText(p.content)).slice(0,20))}</b> 글에 좋아요 <b>${S.likeCounts[p.id]}개</b>`,time:p.created_at,unread:false,action:`openDetail(${p.id})`});
+    myP.filter(p=>(S.likeCounts[p.id]||0)>0).slice(0,3).forEach(p=>{
+      const preview=(p.title||plainText(p.content)||'').slice(0,15);
+      notifs.push({cls:'like',icon:'❤️',txt:'<b>'+esc(preview)+'</b>에 좋아요 '+S.likeCounts[p.id]+'개',time:p.created_at,unread:false,action:'openDetail('+p.id+')'});
     });
   }
   notifs.sort((a,b)=>new Date(b.time)-new Date(a.time));
   const unread=notifs.filter(n=>n.unread);
   const read=notifs.filter(n=>!n.unread);
-  const mkItem=n=>`<div class="notif-item ${n.unread?'unread':''}" ${n.action?`onclick="${n.action};closeSidePanel()"`:''}>
-    <div class="notif-icon ${n.iconClass||'sys'}">${n.icon}</div>
-    <div class="notif-body"><div class="ntxt">${n.txt}</div>${n.customHtml||''}<div class="ntime">${ago(n.time)}</div></div>
-  </div>`;
+  const mk=n=>'<div class="notif-item '+(n.unread?'unread':'')+'" '+(n.action?'onclick="'+n.action+';closeSidePanel()"':'')+'>'
+    +'<div class="n-avi '+(n.cls||'sys')+'">'+n.icon+'</div>'
+    +'<div class="n-body"><div class="n-txt">'+n.txt+'</div>'+(n.actions||'')+'<div class="n-time">'+ago(n.time)+'</div></div></div>';
+  const unreadCnt=unread.length;
   const body=notifs.length
-    ?`${unread.length?`<div class="notif-sep">새 알림</div>${unread.map(mkItem).join('')}`:''}
-       ${read.length?`<div class="notif-sep">이전 알림</div>${read.map(mkItem).join('')}`:''}`
-    :`<div class="empty" style="padding:40px 20px">${ic('bell')}<h3>알림이 없어요</h3><p>활동이 생기면 여기에 표시돼요</p></div>`;
-  const unreadCnt=notifs.filter(n=>n.unread).length;
-  return `<div class="slide-panel"><div class="slide-panel-head">${ic('bell','sm')}<h3>알림</h3>${unreadCnt?`<span style="background:var(--like);color:#fff;font-size:11px;font-weight:700;padding:2px 7px;border-radius:8px">${unreadCnt}</span>`:''}<div style="flex:1"></div>${unreadCnt?`<button style="font-size:12px;color:var(--accent);font-weight:600;padding:4px 8px" onclick="markAllNotifRead()">모두 읽음</button>`:''}<div class="slide-panel-close" onclick="closeSidePanel()">${ic('x','sm')}</div></div><div class="slide-panel-body">${body}</div></div>`;
+    ?(unread.length?'<div class="n-sep">새 알림</div>'+unread.map(mk).join(''):'')
+     +(read.length?'<div class="n-sep">이전</div>'+read.map(mk).join(''):'')
+    :'<div style="text-align:center;padding:60px 20px;color:var(--text3)"><div style="font-size:36px;margin-bottom:12px">🔔</div><div style="font-weight:600;font-size:15px">알림이 없어요</div><div style="font-size:13px;margin-top:4px">활동이 생기면 여기에 표시돼요</div></div>';
+  return '<div class="slide-panel"><div class="slide-panel-head">'+ic('bell','sm')+'<h3>알림</h3>'+(unreadCnt?'<span style="background:var(--accent);color:#fff;font-size:11px;font-weight:700;padding:3px 8px;border-radius:10px;min-width:20px;text-align:center">'+unreadCnt+'</span>':'')+'<div style="flex:1"></div>'+(unreadCnt?'<button style="font-size:12px;color:var(--accent);font-weight:700;padding:4px 10px;border-radius:8px;background:var(--accent-soft);border:none;cursor:pointer" onclick="markAllNotifRead()">모두 읽음</button>':'')+'<div class="slide-panel-close" onclick="closeSidePanel()">'+ic('x','sm')+'</div></div><div class="slide-panel-body" style="padding:4px 8px">'+body+'</div></div>';
 }
 function memberPanel(){
   if(!S.forest||!_showMemberPanel)return '';
@@ -1756,7 +1762,7 @@ async function openGifPop(chId){
     <div style="display:flex;gap:6px;padding:8px 12px;overflow-x:auto;flex-shrink:0;border-bottom:1px solid var(--line);scrollbar-width:none">
       ${cats.map((c,i)=>`<button onclick="document.getElementById('gif-search').value='';searchGif('${c.replace(/[🔥😂🥺😎🎉😢😡🐱🐶]/u,'').trim()}')" style="padding:5px 12px;border-radius:20px;font-size:12.5px;font-weight:600;white-space:nowrap;background:${i===0?'var(--accent)':'var(--card2)'};color:${i===0?'#fff':'var(--text2)'};border:none;cursor:pointer;flex-shrink:0">${c}</button>`).join('')}
     </div>
-    <div id="gif-grid" style="columns:2;column-gap:6px;padding:8px;overflow-y:auto;flex:1">
+    <div id="gif-grid" style="columns:2;column-gap:6px;padding:8px;overflow-y:auto;flex:1;-webkit-columns:2">
       <div style="text-align:center;padding:20px;color:var(--text3)">불러오는 중...</div>
     </div>`;
   document.body.appendChild(pop);
@@ -1771,46 +1777,44 @@ function gifSearchDebounce(q){
 }
 
 async function searchGif(q){
-  _gifQuery=q;
   const grid=document.getElementById('gif-grid');if(!grid)return;
-  grid.innerHTML=`<div style="text-align:center;padding:20px;color:var(--text3)">🔍 로딩 중...</div>`;
+  if(q&&(q.startsWith('http://')||q.startsWith('https://'))){sendGif(q);return}
+  grid.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3)">로딩 중...</div>';
   try{
-    const isTrending=!q||q==='trending'||q==='🔥인기';
-    // Tenor v1 - API 키 불필요
-    const url=isTrending
-      ?`https://api.giphy.com/v1/gifs/trending?api_key=dc6zaTOxFJmzC&limit=20&rating=g`
-      :`https://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&q=${encodeURIComponent(q)}&limit=20&rating=g`;
+    const url=(!q||q==='trending')
+      ?'https://api.giphy.com/v1/gifs/trending?api_key=YskmAjAkhI8h0k02aSKMfpr2D6c2m6qk&limit=20&rating=g&bundle=low_bandwidth'
+      :'https://api.giphy.com/v1/gifs/search?api_key=YskmAjAkhI8h0k02aSKMfpr2D6c2m6qk&q='+encodeURIComponent(q)+'&limit=20&rating=g&bundle=low_bandwidth';
     const res=await fetch(url);
     if(!res.ok)throw new Error('HTTP '+res.status);
-    const data=await res.json();
-    const results=data.data||[];
-    if(!results.length){
-      grid.innerHTML=`<div style="text-align:center;padding:20px;color:var(--text3)">😢 결과가 없어요</div>`;
-      return;
-    }
+    const results=(await res.json()).data||[];
+    if(!results.length){grid.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3)">결과 없음</div>';return}
     grid.innerHTML=results.map(r=>{
-      const gifUrl=r.images?.fixed_height_small?.url||r.images?.fixed_height?.url||'';
-      if(!gifUrl)return '';
-      const safe=gifUrl.replace(/'/g,'%27');
-      // 각 GIF가 자연스러운 비율로 표시되도록 (masonry 효과)
-      return `<div onclick="sendGif('${safe}')" style="cursor:pointer;border-radius:10px;overflow:hidden;background:var(--card2);transition:transform .15s,opacity .15s;margin-bottom:6px;break-inside:avoid;display:block" onmouseover="this.style.transform='scale(1.03)';this.style.opacity='0.9'" onmouseout="this.style.transform='';this.style.opacity='1'"><img src="${gifUrl}" style="width:100%;display:block;border-radius:10px" loading="lazy"></div>`;
+      const thumb=r.images?.fixed_width_small_still?.url||r.images?.fixed_width_small?.url||'';
+      const full=r.images?.fixed_width?.url||r.images?.original?.url||thumb;
+      if(!thumb)return'';
+      return '<div onclick="sendGif(\''+full.replace(/'/g,'%27')+'\')" style="cursor:pointer;border-radius:8px;overflow:hidden;margin-bottom:5px;break-inside:avoid" onmouseover="this.querySelector(\'img\').src=\''+full.replace(/'/g,'%27')+'\'" onmouseout="this.querySelector(\'img\').src=\''+thumb.replace(/'/g,'%27')+'\'"><img src="'+thumb+'" style="width:100%;display:block" loading="lazy"></div>';
     }).join('');
-  }catch(e){
-    console.error('GIF 에러:',e);
-    grid.innerHTML=`<div style="text-align:center;padding:20px;color:var(--text3)">😥 불러오기 실패<br><small>${e.message}</small></div>`;
-  }
+  }catch(e){grid.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3)">실패</div>'}
 }
 window.gifSearchDebounce=gifSearchDebounce;
 
 async function sendGif(url){
   document.getElementById('gif-pop-el')?.remove();
   document.getElementById('gif-ov')?.remove();
-  if(!_gifChId||!S.me){toast('로그인 필요');return}
+  if(!S.me){toast('로그인 필요');return}
   try{
-    await sb.from('posts').insert({forest_id:S.forest,channel_id:_gifChId,author:S.me,anon_nick:null,content:'',title:'',imgs:[url],tags:[],files:[]});
-    await loadAll();
-    setTimeout(()=>{const el=document.getElementById('chat-msgs');if(el)el.scrollTo({top:el.scrollHeight,behavior:'smooth'})},100);
-  }catch(e){toast('GIF 전송 실패')}
+    if(_gifChId==='dm'){
+      // DM GIF
+      await sb.from('direct_messages').insert({from_nick:S.me,to_nick:S.dmTarget,content:'',img:url});
+      await loadAll();
+      setTimeout(()=>{const el=document.getElementById('dm-msgs');if(el)el.scrollTo({top:el.scrollHeight,behavior:'smooth'})},100);
+    }else{
+      // 채팅 GIF
+      await sb.from('posts').insert({forest_id:S.forest,channel_id:_gifChId,author:S.me,anon_nick:null,content:'',title:'',imgs:[url],tags:[],files:[]});
+      await loadAll();
+      setTimeout(()=>{const el=document.getElementById('chat-msgs');if(el)el.scrollTo({top:el.scrollHeight,behavior:'smooth'})},100);
+    }
+  }catch(e){toast('GIF 전송 실패');console.error(e)}
 }
 window.searchGif=searchGif;window.sendGif=sendGif;
 
@@ -2066,8 +2070,23 @@ let _onlineUsers=new Set();
 // ═══ REALTIME (Supabase) ═══
 function initRealtime(){
   try{
+    let _rtDebounce=null;
     _rtChannel=sb.channel('public-changes')
-      .on('postgres_changes',{event:'*',schema:'public'},()=>{loadAll()})
+      .on('postgres_changes',{event:'*',schema:'public'},()=>{
+        // 입력 중이면 무시
+        const active=document.activeElement;
+        if(active&&(active.tagName==='INPUT'||active.tagName==='TEXTAREA'||active.isContentEditable))return;
+        // 모달 열려있으면 무시
+        if(document.querySelector('.modal-overlay'))return;
+        // 디바운스 10초
+        if(_rtDebounce)clearTimeout(_rtDebounce);
+        _rtDebounce=setTimeout(async()=>{
+          const scrollEl=document.querySelector('.main');
+          const scrollTop=scrollEl?scrollEl.scrollTop:0;
+          await loadAll();
+          if(scrollEl)scrollEl.scrollTop=scrollTop;
+        },10000);
+      })
       .subscribe();
     // Presence: 로그인 유저만 트래킹
     if(S.me){
@@ -2456,17 +2475,29 @@ function cmtPickImg(inp,pid){
 }
 function openCmtGif(pid){
   window._cmtGifTarget=pid;
-  modal('<div class="modal-head"><h2>GIF 검색</h2><button class="modal-x" onclick="closeM()">'+ic('x','sm')+'</button></div><div class="modal-body"><input class="inp" id="cmt-gif-q" placeholder="GIF 검색..." oninput="searchCmtGif()" style="margin-bottom:12px"><div id="cmt-gif-results" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:300px;overflow-y:auto"></div></div>');
+  modal('<div class="modal-head"><h2>GIF 검색</h2><button class="modal-x" onclick="closeM()">'+ic('x','sm')+'</button></div><div class="modal-body"><input class="inp" id="cmt-gif-q" placeholder="GIF 검색..." oninput="searchCmtGif()" style="margin-bottom:12px"><div id="cmt-gif-results" style="columns:2;column-gap:6px;max-height:300px;overflow-y:auto;padding:4px"><div style="text-align:center;padding:20px;color:var(--text3)">로딩 중...</div></div></div>');
+  setTimeout(searchCmtGif,100);
 }
 function searchCmtGif(){
   var q=document.getElementById('cmt-gif-q')?.value||'';
   var url=q
-    ?'https://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&q='+encodeURIComponent(q)+'&limit=12&rating=g'
-    :'https://api.giphy.com/v1/gifs/trending?api_key=dc6zaTOxFJmzC&limit=12&rating=g';
+    ?'https://api.giphy.com/v1/gifs/search?api_key=YskmAjAkhI8h0k02aSKMfpr2D6c2m6qk&q='+encodeURIComponent(q)+'&limit=20&rating=g'
+    :'https://api.giphy.com/v1/gifs/trending?api_key=YskmAjAkhI8h0k02aSKMfpr2D6c2m6qk&limit=20&rating=g';
   fetch(url).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){
     var el=document.getElementById('cmt-gif-results');if(!el)return;
-    el.innerHTML=(d.data||[]).map(function(g){var u=g.images?.fixed_height_small?.url||g.images?.fixed_height?.url||'';if(!u)return'';return '<img src="'+u+'" style="width:100%;border-radius:8px;cursor:pointer;object-fit:cover;height:100px" onclick="pickCmtGif(\''+u+'\')">'}).join('');
-  }).catch(function(e){console.error('GIF err:',e)});
+    var results=d.data||[];
+    if(!results.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3)">결과 없음</div>';return}
+    el.innerHTML=results.map(function(g){
+      var thumb=g.images?.fixed_width_small_still?.url||g.images?.fixed_width_small?.url||'';
+      var full=g.images?.fixed_width?.url||g.images?.original?.url||thumb;
+      if(!thumb)return'';
+      return '<div style="break-inside:avoid;margin-bottom:5px;border-radius:8px;overflow:hidden;cursor:pointer" onclick="pickCmtGif(\''+full.replace(/'/g,'%27')+'\')" onmouseover="this.querySelector(\'img\').src=\''+full.replace(/'/g,'%27')+'\'" onmouseout="this.querySelector(\'img\').src=\''+thumb.replace(/'/g,'%27')+'\'"><img src="'+thumb+'" style="width:100%;display:block" loading="lazy"></div>'
+    }).join('');
+  }).catch(function(e){
+    console.error('GIF:',e);
+    var el=document.getElementById('cmt-gif-results');
+    if(el)el.innerHTML='<div style="text-align:center;padding:16px;color:var(--text3)">GIF 로딩 실패</div>';
+  });
 }
 function pickCmtGif(url){
   var pid=window._cmtGifTarget;
@@ -2484,7 +2515,7 @@ async function addCmt(pid){
   var useAnon=S.globalAnon||!S.me;
   var data={post_id:pid,author:useAnon?null:(S.me||null),anon_nick:useAnon?anonNick():null,content:txt};
   if(img)data.img=img;
-  try{await sb.from('comments').insert(data);_cmtImgs[pid]=null;var prev=document.getElementById('cmt-preview-'+pid);if(prev){prev.style.display='none';prev.innerHTML=''}await loadAll();toast('댓글 등록!')}catch(e){toast('댓글 실패: '+e.message,'error')}
+  try{const{error:cmtErr}=await sb.from('comments').insert(data);if(cmtErr){toast('댓글 실패: '+cmtErr.message,'error');console.error('cmt insert err:',cmtErr);return}_cmtImgs[pid]=null;var prev=document.getElementById('cmt-preview-'+pid);if(prev){prev.style.display='none';prev.innerHTML=''}await loadAll();toast('댓글 등록!')}catch(e){toast('댓글 실패: '+e.message,'error');console.error('cmt catch:',e)}
 }
 function toggleCmtAnon(){S.globalAnon=!S.globalAnon;localStorage.setItem('globalAnon',S.globalAnon?'1':'0');render();toast(S.globalAnon?'익명 모드 ON':'공개 모드','info')}
 async function addReply(pid,parentId){const inp=document.getElementById('ri-'+parentId);if(!inp||!inp.value.trim())return;const content=inp.value.trim();inp.value='';try{await sb.from('comments').insert({post_id:pid,parent_id:parentId,author:S.me||null,anon_nick:S.me?null:anonNick(),content});await loadAll()}catch(e){toast('답글 실패: '+e.message)}}
